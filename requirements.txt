@@ -2,3 +2,5 @@ Flask
 openpyxl
 pymysql
 pandas
+matplotlib
+xlrd>=2.0.1

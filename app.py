@@ -1,9 +1,6 @@
-# app.py
 from flask import Flask, request, render_template
 import pandas as pd
 import pymysql
-import os
-
 from config import MYSQL_CONFIG
 
 app = Flask(__name__)
@@ -11,29 +8,18 @@ app = Flask(__name__)
 # Global variable to store DataFrame
 uploaded_df = None
 
-# Check MySQL connection
 def check_db_connection():
     try:
         conn = pymysql.connect(**MYSQL_CONFIG)
         conn.close()
         return True
-    except Exception as e:
-        print(f"Database connection error: {e}")
+    except pymysql.MySQLError:
         return False
 
 def read_excel(file):
     # Read the Excel file into a DataFrame
     df = pd.read_excel(file)
     return df
-
-def analyze_excel(df):
-    results = []
-    # Example: Analyze first column 'Column1'
-    for index, row in df.iterrows():
-        content = row['Column1']
-        if 'specific_condition' in content:
-            results.append(content)
-    return results
 
 def query_database(data):
     results = []
@@ -55,48 +41,36 @@ def query_database(data):
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
+    global uploaded_df
     message = ""
-    df = None
     if request.method == 'POST':
         file = request.files['file']
         
         if not check_db_connection():
             message = 'Database connection failed.'
-            return render_template('index.html', message=message)
+            return render_template('index.html', status=message)
 
-        # Read and display Excel content
-        df = read_excel(file)
-        results = analyze_excel(df)
-        query_results = query_database(results)
+        # Read Excel content
+        uploaded_df = read_excel(file)
 
-        return render_template('results.html', df=df.to_html(classes='data', header="true", index=False), query_results=query_results)
+        # Call analyze_excel with the uploaded DataFrame and the starting row
+        modified_content = analyze_excel(uploaded_df)  # Replace 5 with your desired start row
 
-    return render_template('index.html', message=message)
+        # Convert modified_content to DataFrame for rendering
+        modified_df = pd.DataFrame(modified_content, columns=['Product', 'Total'])
 
+        return render_template('index.html', 
+                               status='File uploaded successfully!', 
+                               uploaded_file=uploaded_df.to_html(classes='data', header="true", index=False),
+                               modified_content=modified_df.to_html(classes='data', header="true", index=False))  # Pass modified content as HTML
 
-@app.route('/upload', methods=['POST'])
-def upload_file():
-    if 'file' not in request.files:
-        return "No file part"
-    file = request.files['file']
-    if file.filename == '':
-        return "No selected file"
-    
-    if file and file.filename.endswith('.xlsx'):
-        file_path = os.path.join('uploads', file.filename)
-        file.save(file_path)
-        return render_template('index.html', status="File uploaded successfully.", uploaded_file=file.filename, result=None)
-    return "Invalid file type"
+    return render_template('index.html', status=message)
 
 @app.route('/analyze', methods=['POST'])
-def analyze_data():
-    # Load the uploaded file
-    file_path = 'uploads/your_file.xlsx'  # Change this based on how you handle uploads
-    df = pd.read_excel(file_path)
-    
+def analyze_data():    
     # Analyze specific column
     # For example, analyze the 'column_name' column
-    results = df['column_name'].apply(lambda x: your_analysis_function(x))
+    results = uploaded_df['column_name'].apply(lambda x: analyze_excel(x))
     
     # Connect to the MySQL database
     conn = pymysql.connect(**MYSQL_CONFIG)
@@ -116,11 +90,62 @@ def analyze_data():
 
     return render_template('index.html', status="Analysis complete.", result=display_result)
 
-def your_analysis_function(value):
-    # Define your analysis logic here
-    return value  # Modify this based on your conditions
+import numpy as np
+import pandas as pd  # Ensure pandas is imported for DataFrame operations
+
+def analyze_excel(df):
+    results = []
+    start_row = 1
+    stop_row = len(df) - 4  # Set stop_row to four less than the total number of rows
+    count = 0
+
+    for index in range(start_row, stop_row + 1):  # Include the last row
+        if index < count:
+            continue
+        # Access the second and fourth columns
+        second_column_content = df.iloc[index, 1]  # Second column
+        fourth_column_content = df.iloc[index, 3]  # Fourth column
+
+        # Check if the fourth column is NaN
+        if pd.isna(fourth_column_content) or pd.isna(second_column_content):
+            continue  # Skip this row if the any of columns is NaN
+
+        # Check if fourth_column_content is not numeric
+        if not isinstance(fourth_column_content, (int, float)) and not pd.to_numeric(fourth_column_content, errors='coerce'):
+            continue  # Skip this row if fourth column is not numeric
+
+        # Modify the second column content if necessary
+        if isinstance(second_column_content, str):
+            if '(' in second_column_content:
+                second_column_content = second_column_content.replace('(', ' (')  # Add space before
+
+            # Extract the substring from the second column content up to the first space
+            first_space_index = second_column_content.find(' ')
+            substring = second_column_content[:first_space_index] if first_space_index != -1 else second_column_content
+            
+            # Initialize the total sum with the current row's fourth column value
+            total_sum = fourth_column_content
+
+            # Loop through following rows to sum up the fourth column values
+            for following_index in range(index + 1, stop_row + 1):
+                following_content = df.iloc[following_index, 1]  # Get the second column of the following row
+                
+                # Check if the following content starts with the stored substring
+                if isinstance(following_content, str) and following_content.startswith(substring):
+                    following_fourth_column = df.iloc[following_index, 3]
+
+                    # Only add to the total if the fourth column is valid (not NaN or 0)
+                    if pd.notna(following_fourth_column) and following_fourth_column != 0:
+                        total_sum += following_fourth_column  # Sum up the fourth column value
+                else:
+                    count = following_index
+                    break  # Stop if a mismatch is found
+            
+            # Append the substring and total sum to results
+            results.append((substring, total_sum))
+
+    return results
+
 
 if __name__ == '__main__':
-    if not os.path.exists('uploads'):
-        os.makedirs('uploads')
     app.run(debug=True)
