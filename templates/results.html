@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analysis Results</title>
+    <style>
+        table.data {
+            border-collapse: collapse;
+            width: 100%;
+        }
+        table.data th, table.data td {
+            border: 1px solid black;
+            padding: 8px;
+            text-align: left;
+        }
+    </style>
+</head>
+<body>
+    <h1>Excel Content</h1>
+    <div>
+        {{ df|safe }}
+    </div>
+
+    <h2>Query Results</h2>
+    {% if query_results %}
+        <table border="1">
+            <tr>
+                <th>Column1</th>
+                <th>Column2</th> <!-- Adjust as per your table structure -->
+                <!-- Add more columns as needed -->
+            </tr>
+            {% for row in query_results %}
+                <tr>
+                    <td>{{ row[0] }}</td>
+                    <td>{{ row[1] }}</td>
+                    <!-- Add more columns as needed -->
+                </tr>
+            {% endfor %}
+        </table>
+    {% else %}
+        <p>No results found.</p>
+    {% endif %}
+    
+    <a href="{{ url_for('index') }}">Back</a>
+</body>
+</html>

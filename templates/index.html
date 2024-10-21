@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Excel Analyzer</title>
+    <style>
+        table.data {
+            border-collapse: collapse;
+            width: 100%;
+        }
+        table.data th, table.data td {
+            border: 1px solid black;
+            padding: 8px;
+            text-align: left;
+        }
+    </style>
+</head>
+<body>
+    <h1>Upload and Analyze XLSX File</h1>
+    <form action="/" method="post" enctype="multipart/form-data">
+        <input type="file" name="file" accept=".xlsx" required>
+        <button type="submit">Upload</button>
+    </form>
+
+    <p id="status">{{ status }}</p>
+    
+    {% if uploaded_file %}
+        <h2>Uploaded File Content</h2>
+        <div>{{ uploaded_file|safe }}</div>
+    {% endif %}
+
+    <form action="/analyze" method="post">
+        <button type="submit">Analyze Data</button>
+    </form>
+
+    {% if result %}
+        <h2>Analysis Result</h2>
+        <p>{{ result }}</p>
+    {% endif %}
+</body>
+</html>
