@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manage Patterns and Divisions</title>
+    <style>
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid black;
+            padding: 10px;
+            text-align: left;
+        }
+    </style>
+</head>
+<body>
+    <h1>Manage Patterns and Divisions</h1>
+
+    <input type="text" id="search" placeholder="Search patterns..." onkeyup="searchPatterns()">
+    <button onclick="fetchPatterns()">Refresh</button>
+
+    <table id="patternsTable">
+        <thead>
+            <tr>
+                <th>Pattern</th>
+                <th>Division</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="patternsBody">
+            <!-- Dynamic content will be inserted here -->
+        </tbody>
+    </table>
+
+    <h2>Add/Edit Pattern</h2>
+    <input type="text" id="patternInput" placeholder="Pattern">
+    <input type="text" id="divisionInput" placeholder="Division">
+    <button onclick="addOrUpdatePattern()">Add/Update</button>
+
+    <script>
+        let editIndex = -1;
+
+        function fetchPatterns() {
+            fetch('/api/patterns')
+                .then(response => response.json())
+                .then(data => {
+                    const tbody = document.getElementById('patternsBody');
+                    tbody.innerHTML = '';
+                    data.forEach((item, index) => {
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td>${item.pattern}</td>
+                            <td>${item.division}</td>
+                            <td>
+                                <button onclick="editPattern(${index})">Edit</button>
+                                <button onclick="deletePattern('${item.pattern}')">Delete</button>
+                            </td>
+                        `;
+                        tbody.appendChild(row);
+                    });
+                });
+        }
+
+        function searchPatterns() {
+            const input = document.getElementById('search').value.toLowerCase();
+            const rows = document.querySelectorAll('#patternsBody tr');
+            rows.forEach(row => {
+                const pattern = row.cells[0].innerText.toLowerCase();
+                row.style.display = pattern.includes(input) ? '' : 'none';
+            });
+        }
+
+        function addOrUpdatePattern() {
+            const pattern = document.getElementById('patternInput').value;
+            const division = document.getElementById('divisionInput').value;
+            if (editIndex === -1) {
+                fetch('/api/patterns', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ pattern, division }),
+                }).then(() => {
+                    fetchPatterns();
+                    clearInputs();
+                });
+            } else {
+                fetch(`/api/patterns/${pattern}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ division }),
+                }).then(() => {
+                    fetchPatterns();
+                    clearInputs();
+                });
+            }
+        }
+
+        function editPattern(index) {
+            const rows = document.querySelectorAll('#patternsBody tr');
+            const selectedRow = rows[index];
+            const pattern = selectedRow.cells[0].innerText;
+            const division = selectedRow.cells[1].innerText;
+
+            document.getElementById('patternInput').value = pattern;
+            document.getElementById('divisionInput').value = division;
+            editIndex = index;
+        }
+
+        function deletePattern(pattern) {
+            fetch(`/api/patterns/${pattern}`, {
+                method: 'DELETE',
+            }).then(() => {
+                fetchPatterns();
+            });
+        }
+
+        function clearInputs() {
+            document.getElementById('patternInput').value = '';
+            document.getElementById('divisionInput').value = '';
+            editIndex = -1;
+        }
+
+        // Initial fetch
+        fetchPatterns();
+    </script>
+</body>
+</html>

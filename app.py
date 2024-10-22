@@ -1,12 +1,19 @@
 from flask import Flask, request, render_template
 import pandas as pd
 import pymysql
+import numpy as np
+
 from config import MYSQL_CONFIG
+from api import api  # Import the API blueprint
 
 app = Flask(__name__)
 
+app.register_blueprint(api)
+
 # Global variable to store DataFrame
 uploaded_df = None
+# Global variable to store patterns and divisions
+patterns_divisions_dict = {}
 
 def check_db_connection():
     try:
@@ -20,24 +27,6 @@ def read_excel(file):
     # Read the Excel file into a DataFrame
     df = pd.read_excel(file)
     return df
-
-def query_database(data):
-    results = []
-    try:
-        conn = pymysql.connect(**MYSQL_CONFIG)
-        cursor = conn.cursor()
-
-        for item in data:
-            query = f"SELECT nomenklature, division_code FROM master_data WHERE nomenklature like %s"
-            cursor.execute(query, (item,))
-            results.extend(cursor.fetchall())
-
-        cursor.close()
-        conn.close()
-    except pymysql.MySQLError as err:
-        return str(err)
-    
-    return results
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
@@ -53,11 +42,11 @@ def index():
         # Read Excel content
         uploaded_df = read_excel(file)
 
-        # Call analyze_excel with the uploaded DataFrame and the starting row
-        modified_content = analyze_excel(uploaded_df)  # Replace 5 with your desired start row
+        # Call analyze_excel with the uploaded DataFrame
+        modified_content = analyze_excel(uploaded_df) 
 
         # Convert modified_content to DataFrame for rendering
-        modified_df = pd.DataFrame(modified_content, columns=['Product', 'Total'])
+        modified_df = pd.DataFrame(modified_content, columns=['Product', 'Total', 'Division'])
 
         return render_template('index.html', 
                                status='File uploaded successfully!', 
@@ -90,14 +79,76 @@ def analyze_data():
 
     return render_template('index.html', status="Analysis complete.", result=display_result)
 
-import numpy as np
-import pandas as pd  # Ensure pandas is imported for DataFrame operations
+def query_database(data):
+    results = []
+    try:
+        conn = pymysql.connect(**MYSQL_CONFIG)
+        cursor = conn.cursor()
 
+        # Prepare the query to search for the nomenclature
+        query = "SELECT DISTINCT division_code FROM master_data WHERE nomenklature LIKE '{s}%'".format(s=data)
+        cursor.execute(query)  # Pass the entire content as a parameter
+
+        results = cursor.fetchall()  # Fetch all results
+
+        cursor.close()
+        conn.close()
+    except pymysql.MySQLError as err:
+        return str(err)
+    
+    return results
+
+def describe_division(second_column_content):
+    global patterns_divisions_dict
+
+    # Check if the second_column_content matches any pattern
+    for pattern in patterns_divisions_dict:
+        if pattern in second_column_content:
+            return patterns_divisions_dict[pattern]  # Return the corresponding division
+
+    # If no match found, query the database
+    division_code = query_database(second_column_content)
+    
+    # If the query returns one result, return the division code
+    if len(division_code) == 1:
+        return division_code[0][0]  # Return the division_code
+
+    # Return an empty string if there are no results or more than one result
+    return ""
+
+def get_patterns_from_db():
+    """Fetch patterns and their corresponding divisions from the MySQL database."""
+    global patterns_divisions_dict  # Declare the global variable
+
+    try:
+        connection = pymysql.connect(**MYSQL_CONFIG)
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT pattern, code FROM division_patterns")  # Adjust query as needed
+            results = cursor.fetchall()  # Fetch all results
+            
+            # Populate the dictionary from the fetched results
+            for pattern, code in results:
+                patterns_divisions_dict[pattern] = code
+                
+    finally:
+        connection.close()
+
+def prepare_exel_content(second_column_content):
+    if isinstance(second_column_content, str):
+        if '(' in second_column_content:
+            second_column_content = second_column_content.replace('(', ' (')  # Add space before
+        if ' №' in second_column_content:
+            second_column_content = second_column_content.replace(' №', '.№')  # Add dot before
+    else:
+        return ""
+    return second_column_content
+        
 def analyze_excel(df):
     results = []
     start_row = 1
     stop_row = len(df) - 4  # Set stop_row to four less than the total number of rows
     count = 0
+    get_patterns_from_db()
 
     for index in range(start_row, stop_row + 1):  # Include the last row
         if index < count:
@@ -110,28 +161,31 @@ def analyze_excel(df):
         if pd.isna(fourth_column_content) or pd.isna(second_column_content):
             continue  # Skip this row if the any of columns is NaN
 
-        # Check if fourth_column_content is not numeric
-        if not isinstance(fourth_column_content, (int, float)) and not pd.to_numeric(fourth_column_content, errors='coerce'):
-            continue  # Skip this row if fourth column is not numeric
+        # Check if fourth_column_content is numeric
+        if not isinstance(fourth_column_content, (int, float)) and pd.isna(pd.to_numeric(fourth_column_content, errors='coerce')):
+            continue  # Skip this row if fourth column is not numeric          
 
         # Modify the second column content if necessary
         if isinstance(second_column_content, str):
-            if '(' in second_column_content:
-                second_column_content = second_column_content.replace('(', ' (')  # Add space before
+            second_column_content = prepare_exel_content(second_column_content)
 
             # Extract the substring from the second column content up to the first space
             first_space_index = second_column_content.find(' ')
             substring = second_column_content[:first_space_index] if first_space_index != -1 else second_column_content
             
+            # Look up for division
+            division = describe_division(substring) if first_space_index != -1 else ""
+
             # Initialize the total sum with the current row's fourth column value
             total_sum = fourth_column_content
 
             # Loop through following rows to sum up the fourth column values
             for following_index in range(index + 1, stop_row + 1):
                 following_content = df.iloc[following_index, 1]  # Get the second column of the following row
-                
+                following_content = prepare_exel_content(following_content)   
+
                 # Check if the following content starts with the stored substring
-                if isinstance(following_content, str) and following_content.startswith(substring):
+                if isinstance(following_content, str) and following_content.startswith(substring+" "):
                     following_fourth_column = df.iloc[following_index, 3]
 
                     # Only add to the total if the fourth column is valid (not NaN or 0)
@@ -142,10 +196,9 @@ def analyze_excel(df):
                     break  # Stop if a mismatch is found
             
             # Append the substring and total sum to results
-            results.append((substring, total_sum))
+            results.append((substring, total_sum, division))
 
     return results
-
 
 if __name__ == '__main__':
     app.run(debug=True)
