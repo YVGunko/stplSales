@@ -29,11 +29,12 @@
         <input type="file" name="file" accept=".xlsx,.xls" required>
         <button type="submit">Upload</button>
     </form>
-    <form action="/analyze" method="post">
-        <button type="submit">Analyze Data</button>
-    </form>
     <p id="status">{{ status }}</p>
-    
+
+    <form action="/save" method="post">
+        <button type="submit">Save on server</button>
+    </form>
+
     {% if uploaded_file %}
         <h2>Uploaded File Content</h2>
         <div class="table-container">
@@ -46,6 +47,25 @@
         <div class="table-container">
             <div>{{ modified_content|safe }}</div>
         </div>
+        <button onclick="saveData()">Save on Server</button>
     {% endif %}
+
+    <script>
+        // Prepare the modified content in JSON format
+        const modifiedContent = {{ modified_content | tojson | safe }};
+
+        async function saveData() {
+            const response = await fetch('/api/save', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(modifiedContent),
+            });
+
+            const result = await response.json();
+            alert(result.message);
+        }
+    </script>
 </body>
 </html>

@@ -50,12 +50,10 @@ def index():
 
         # Read the specific range of rows from the Excel file
         uploaded_df = pd.read_excel(file, skiprows=start_exel_row, nrows=num_rows)
+        # uploaded_df = pd.read_excel(file, skiprows=start_exel_row, nrows=num_rows)
 
-        # If you want to reset the index after reading
-        # uploaded_df.reset_index(drop=True, inplace=True)
-
-        print("Before sorting:")
-        print(uploaded_df)
+        #print("Before sorting:")
+        #print(uploaded_df)
 
         # Call prepare_excel with the uploaded DataFrame
         modified_excel_df = pd.DataFrame(prepare_excel(uploaded_df) , columns=[first_column_name, second_column_name])
@@ -65,8 +63,8 @@ def index():
         # If you want to reset the index after reading
         modified_excel_df.reset_index(drop=True, inplace=True)
 
-        print("After sorting:")
-        print(modified_excel_df)
+        #print("After sorting:")
+        #print(modified_excel_df)
 
         # Call analyze_excel with the uploaded DataFrame
         modified_content = analyze_excel(modified_excel_df) 
@@ -80,34 +78,6 @@ def index():
                                modified_content=modified_df.to_html(classes='data', header="true", index=False))  # Pass modified content as HTML
 
     return render_template('index.html', status=message)
-
-@app.route('/manage-patterns', methods=['POST'])
-def manage_patterns():
-    return render_template('manage-patterns.html', status="Analysis complete.", result=display_result)
-
-@app.route('/analyze', methods=['POST'])
-def analyze_data():    
-    # Analyze specific column
-    # For example, analyze the 'column_name' column
-    results = uploaded_df['column_name'].apply(lambda x: analyze_excel(x))
-    
-    # Connect to the MySQL database
-    conn = pymysql.connect(**MYSQL_CONFIG)
-    cursor = conn.cursor()
-    
-    # Example SQL query based on analysis results
-    for result in results:
-        cursor.execute("SELECT * FROM your_table WHERE your_condition = %s", (result,))
-    
-    query_results = cursor.fetchall()
-    conn.close()
-
-    # Process and visualize query_results
-    display_result = "No results found."
-    if query_results:  # Check for specific conditions
-        display_result = f"Found {len(query_results)} results."
-
-    return render_template('index.html', status="Analysis complete.", result=display_result)
 
 def query_database(data):
     results = []
@@ -247,6 +217,15 @@ def analyze_excel(df):
         results.append((substring, total_sum, division))
 
     return results
+
+@app.route('/save', methods=['POST'])
+def save_data():
+    # Delegate save functionality to the API
+    return api.save_data()
+
+@app.route('/manage-patterns', methods=['POST'])
+def manage_patterns():
+    return render_template('manage-patterns.html', status="Analysis complete.", result=display_result)
 
 if __name__ == '__main__':
     app.run(debug=True)
