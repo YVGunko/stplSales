@@ -14,6 +14,11 @@ app.register_blueprint(api)
 uploaded_df = None
 # Global variable to store patterns and divisions
 patterns_divisions_dict = {}
+# Global const
+start_row = 0
+first_column_name = 'Product'
+second_column_name = 'Total'
+third_column_name = 'Division'
 
 def check_db_connection():
     try:
@@ -39,14 +44,35 @@ def index():
             message = 'Database connection failed.'
             return render_template('index.html', status=message)
 
-        # Read Excel content
-        uploaded_df = read_excel(file)
+        # Define the range of rows you want to read
+        start_exel_row = 1  # Adjust this to your desired starting row (0-indexed)
+        num_rows = 100  # Number of rows to read
+
+        # Read the specific range of rows from the Excel file
+        uploaded_df = pd.read_excel(file, skiprows=start_exel_row, nrows=num_rows)
+
+        # If you want to reset the index after reading
+        # uploaded_df.reset_index(drop=True, inplace=True)
+
+        print("Before sorting:")
+        print(uploaded_df)
+
+        # Call prepare_excel with the uploaded DataFrame
+        modified_excel_df = pd.DataFrame(prepare_excel(uploaded_df) , columns=[first_column_name, second_column_name])
+
+        modified_excel_df = modified_excel_df.sort_values(by=modified_excel_df.columns[0], ascending=True)
+
+        # If you want to reset the index after reading
+        modified_excel_df.reset_index(drop=True, inplace=True)
+
+        print("After sorting:")
+        print(modified_excel_df)
 
         # Call analyze_excel with the uploaded DataFrame
-        modified_content = analyze_excel(uploaded_df) 
+        modified_content = analyze_excel(modified_excel_df) 
 
         # Convert modified_content to DataFrame for rendering
-        modified_df = pd.DataFrame(modified_content, columns=['Product', 'Total', 'Division'])
+        modified_df = pd.DataFrame(modified_content, columns=[first_column_name, second_column_name, third_column_name])
 
         return render_template('index.html', 
                                status='File uploaded successfully!', 
@@ -54,6 +80,10 @@ def index():
                                modified_content=modified_df.to_html(classes='data', header="true", index=False))  # Pass modified content as HTML
 
     return render_template('index.html', status=message)
+
+@app.route('/manage-patterns', methods=['POST'])
+def manage_patterns():
+    return render_template('manage-patterns.html', status="Analysis complete.", result=display_result)
 
 @app.route('/analyze', methods=['POST'])
 def analyze_data():    
@@ -87,6 +117,7 @@ def query_database(data):
 
         # Prepare the query to search for the nomenclature
         query = "SELECT DISTINCT division_code FROM master_data WHERE nomenklature LIKE '{s}%'".format(s=data)
+        # query = "SELECT division_code FROM product WHERE name LIKE '{s}%'".format(s=data)
         cursor.execute(query)  # Pass the entire content as a parameter
 
         results = cursor.fetchall()  # Fetch all results
@@ -106,8 +137,8 @@ def describe_division(second_column_content):
         if pattern in second_column_content:
             return patterns_divisions_dict[pattern]  # Return the corresponding division
 
-    # If no match found, query the database
-    division_code = query_database(second_column_content)
+    # If no match found, query the database with second_column_content+SPACE
+    division_code = query_database(second_column_content+" ")
     
     # If the query returns one result, return the division code
     if len(division_code) == 1:
@@ -135,24 +166,22 @@ def get_patterns_from_db():
 
 def prepare_exel_content(second_column_content):
     if isinstance(second_column_content, str):
+        if 'ПОДОШВА ' in second_column_content:
+            second_column_content = second_column_content.replace('ПОДОШВА ', '')  # replace
         if '(' in second_column_content:
             second_column_content = second_column_content.replace('(', ' (')  # Add space before
-        if ' №' in second_column_content:
-            second_column_content = second_column_content.replace(' №', '.№')  # Add dot before
+        if 'АРТ №' in second_column_content:
+            second_column_content = second_column_content.replace('АРТ №', 'АРТ.№')  # Add dot before
+        if second_column_content.strip() and second_column_content.strip()[0].isdigit():
+            second_column_content = 'АРТ.№'+second_column_content  # Add prefix before
     else:
         return ""
     return second_column_content
-        
-def analyze_excel(df):
-    results = []
-    start_row = 1
-    stop_row = len(df) - 4  # Set stop_row to four less than the total number of rows
-    count = 0
-    get_patterns_from_db()
 
-    for index in range(start_row, stop_row + 1):  # Include the last row
-        if index < count:
-            continue
+def prepare_excel(df):
+    results = []
+
+    for index in range(start_row, len(df)):  # Include the last row
         # Access the second and fourth columns
         second_column_content = df.iloc[index, 1]  # Second column
         fourth_column_content = df.iloc[index, 3]  # Fourth column
@@ -168,35 +197,54 @@ def analyze_excel(df):
         # Modify the second column content if necessary
         if isinstance(second_column_content, str):
             second_column_content = prepare_exel_content(second_column_content)
-
-            # Extract the substring from the second column content up to the first space
-            first_space_index = second_column_content.find(' ')
-            substring = second_column_content[:first_space_index] if first_space_index != -1 else second_column_content
-            
-            # Look up for division
-            division = describe_division(substring) if first_space_index != -1 else ""
-
-            # Initialize the total sum with the current row's fourth column value
-            total_sum = fourth_column_content
-
-            # Loop through following rows to sum up the fourth column values
-            for following_index in range(index + 1, stop_row + 1):
-                following_content = df.iloc[following_index, 1]  # Get the second column of the following row
-                following_content = prepare_exel_content(following_content)   
-
-                # Check if the following content starts with the stored substring
-                if isinstance(following_content, str) and following_content.startswith(substring+" "):
-                    following_fourth_column = df.iloc[following_index, 3]
-
-                    # Only add to the total if the fourth column is valid (not NaN or 0)
-                    if pd.notna(following_fourth_column) and following_fourth_column != 0:
-                        total_sum += following_fourth_column  # Sum up the fourth column value
-                else:
-                    count = following_index
-                    break  # Stop if a mismatch is found
             
             # Append the substring and total sum to results
-            results.append((substring, total_sum, division))
+            results.append((second_column_content, fourth_column_content))
+
+    return results
+        
+def analyze_excel(df):
+    results = []
+    count = 0
+    get_patterns_from_db()
+
+    for index in range(start_row, len(df)):  # Include the last row
+        if index < count:
+            continue
+        # Prevent loop with last row in case it has already been added by following_index inner loop 
+        if index == len(df) - 1 and following_content.startswith(substring+" "): break
+
+        # Access the First and Second columns
+        product_content = df.loc[index, first_column_name]  # First column
+        number_content = df.loc[index, second_column_name]  # Second column       
+
+        # Extract the substring from the second column content up to the first space
+        first_space_index = product_content.find(' ')
+        substring = product_content[:first_space_index] if first_space_index != -1 else product_content
+        
+        # Look up for division
+        division = describe_division(substring) if first_space_index != -1 else ""
+
+        # Initialize the total sum with the current row's fourth column value
+        total_sum = number_content
+
+        # Loop through following rows to sum up the fourth column values
+        for following_index in range(index + 1, len(df)):
+            following_content = df.loc[following_index, first_column_name]  # Get the second column of the following row
+
+            # Check if the following content starts with the stored substring
+            if isinstance(following_content, str) and following_content.startswith(substring+" "):
+                following_total = df.loc[following_index, second_column_name]
+
+                # Only add to the total if the fourth column is valid (not NaN or 0)
+                if pd.notna(following_total) and following_total != 0:
+                    total_sum += following_total  # Sum up the total value
+            else:
+                break  # Stop if a mismatch is found
+     
+        count = following_index
+        # Append the substring and total sum to results
+        results.append((substring, total_sum, division))
 
     return results
 
