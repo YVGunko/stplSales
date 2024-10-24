@@ -259,6 +259,13 @@ def show_data():
 
         pivot_table.reset_index(inplace=True)
 
+        # Add a summary row
+        summary_row = pivot_table.sum(numeric_only=True)
+        summary_row['Product'] = 'Total'
+        summary_row['Division'] = ''
+        # Use pd.concat instead of append
+        pivot_table = pd.concat([pivot_table, summary_row.to_frame().T], ignore_index=True)
+
     except pymysql.MySQLError as e:
         return render_template('show_data.html', error=str(e), data=[], divisions=[])
 
