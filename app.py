@@ -1,7 +1,8 @@
-from flask import Flask, request, render_template
+from flask import Flask, jsonify, request, render_template
 import pandas as pd
 import pymysql
 import numpy as np
+import json
 
 from config import MYSQL_CONFIG
 from api import api  # Import the API blueprint
@@ -72,10 +73,14 @@ def index():
         # Convert modified_content to DataFrame for rendering
         modified_df = pd.DataFrame(modified_content, columns=[first_column_name, second_column_name, third_column_name])
 
+        json_dumps=json.dumps(modified_df.to_dict(orient='records'))
+        print(json_dumps)
+
         return render_template('index.html', 
                                status='File uploaded successfully!', 
                                uploaded_file=uploaded_df.to_html(classes='data', header="true", index=False),
-                               modified_content=modified_df.to_html(classes='data', header="true", index=False))  # Pass modified content as HTML
+                               modified_content=modified_df.to_html(classes='data', header="true", index=False),
+                               modified_content_json=json.dumps(modified_df.to_dict(orient='records')))  # Pass modified content as HTML
 
     return render_template('index.html', status=message)
 
@@ -142,6 +147,8 @@ def prepare_exel_content(second_column_content):
             second_column_content = second_column_content.replace('(', ' (')  # Add space before
         if 'АРТ №' in second_column_content:
             second_column_content = second_column_content.replace('АРТ №', 'АРТ.№')  # Add dot before
+        if '№' in second_column_content and second_column_content.strip()[0] == '№':
+            second_column_content = 'АРТ.'+second_column_content  # Add prefix before
         if second_column_content.strip() and second_column_content.strip()[0].isdigit():
             second_column_content = 'АРТ.№'+second_column_content  # Add prefix before
     else:
@@ -218,14 +225,48 @@ def analyze_excel(df):
 
     return results
 
-@app.route('/save', methods=['POST'])
+@app.route('/api/save', methods=['POST'])
 def save_data():
     # Delegate save functionality to the API
     return api.save_data()
 
-@app.route('/manage-patterns', methods=['POST'])
-def manage_patterns():
-    return render_template('manage-patterns.html', status="Analysis complete.", result=display_result)
+@app.route('/show_data', methods=['GET'])
+def show_data():
+    try:
+        connection = pymysql.connect(**MYSQL_CONFIG)
+        with connection.cursor() as cursor:
+            # Fetch divisions with names
+            query = """
+                SELECT s.product, s.total, d.name AS division_name, s.date_of_change 
+                FROM sales s
+                JOIN division d ON s.division_code = d.code
+            """
+            cursor.execute(query)
+            results = cursor.fetchall()  
+
+        # Convert results to DataFrame
+        columns = ['Product', 'Total', 'Division', 'Date of Change']  
+        data = pd.DataFrame(results, columns=columns)
+
+        # Pivot the DataFrame
+        pivot_table = data.pivot_table(
+            index=['Product', 'Division'],  
+            columns='Date of Change',  
+            values='Total', 
+            aggfunc='sum',  
+            fill_value=0  
+        )
+
+        pivot_table.reset_index(inplace=True)
+
+    except pymysql.MySQLError as e:
+        return render_template('show_data.html', error=str(e), data=[], divisions=[])
+
+    # Prepare division list for filtering
+    division_list = [{'code': d[0], 'name': d[1]} for d in results]  # Adjust as needed
+
+    return render_template('show_data.html', data=pivot_table.to_dict(orient='records'), divisions=division_list)
+
 
 if __name__ == '__main__':
     app.run(debug=True)

@@ -10,20 +10,38 @@ def get_db_connection():
 # Create a Blueprint for the API
 api = Blueprint('api', __name__)
 
+@api.route('/api/divisions', methods=['GET'])
+def get_divisions():
+    try:
+        connection = pymysql.connect(**MYSQL_CONFIG)
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT code, name FROM division")
+            divisions = cursor.fetchall()
+        print("Fetched divisions:", divisions)  # Debugging line
+        return jsonify(divisions)
+    except pymysql.MySQLError as e:
+        return jsonify({"status": "error", "message": str(e)})
+    finally:
+        connection.close()
+
 @api.route('/api/save', methods=['POST'])
 def save_data():
-    # Assuming you want to save data from a specific DataFrame or received data
-    data_to_save = request.json  # Or request.form depending on your needs
+    # Get the data from the request
+    data = request.json  # This should contain both the date and modified content
+
+    # Extract the date and modified content
+    date_of_change = data.get('date')  # Get the date value
+    modified_content = data.get('data', [])  # Get the modified content, default to an empty list if not provided
 
     # Connect to the database and insert the data
     try:
         connection = pymysql.connect(**MYSQL_CONFIG)
         with connection.cursor() as cursor:
             # Example of how to save the data (adjust according to your data structure)
-            for entry in data_to_save:
+            for entry in modified_content:
                 # Assuming entry is a dictionary with the required fields
-                cursor.execute("INSERT INTO your_table_name (column1, column2) VALUES (%s, %s)",
-                               (entry['field1'], entry['field2']))  # Adjust as necessary
+                cursor.execute("INSERT INTO sales (product, total, division_code, date_of_change) VALUES (%s, %s, %s, %s)",
+                               (entry['Product'], entry['Total'], entry['Division'], date_of_change))  # Adjust as necessary
 
             connection.commit()
         return jsonify({"status": "success", "message": "Data saved successfully."})
