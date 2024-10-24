@@ -73,7 +73,7 @@
     </div>
 
     <script>
-                // Fetch divisions and populate the dropdown
+        // Fetch divisions and populate the dropdown
         async function fetchDivisions() {
             try {
                 const response = await fetch('/api/divisions');
@@ -91,6 +91,7 @@
                 console.error('Error fetching divisions:', error);
             }
         }
+        
         // Call fetchDivisions on page load
         document.addEventListener('DOMContentLoaded', fetchDivisions);
 
@@ -101,12 +102,23 @@
 
             for (let row of rows) {
                 const divisionCell = row.cells[1].innerText; // Division name is now in the second column
-                if (divisionCode === "" || divisionCell === divisionCode) {
+                const rowDivisionCode = getDivisionCodeFromName(divisionCell); // Convert name back to code for comparison
+                if (divisionCode === "" || rowDivisionCode === divisionCode) {
                     row.style.display = ""; // Show row
                 } else {
                     row.style.display = "none"; // Hide row
                 }
             }
+        }
+
+        function getDivisionCodeFromName(divisionName) {
+            const divisionSelect = document.getElementById('division-select');
+            for (let option of divisionSelect.options) {
+                if (option.textContent === divisionName) {
+                    return option.value; // Return the code associated with the name
+                }
+            }
+            return null; // If not found
         }
 
         function sortData(order) {
