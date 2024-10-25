@@ -291,10 +291,10 @@ def show_data():
 
         # Create a mapping from English month names to Russian month names
         month_mapping = {
-            'January': 'января', 'February': 'февраля', 'March': 'марта', 
-            'April': 'апреля', 'May': 'мая', 'June': 'июня', 
-            'July': 'июля', 'August': 'августа', 'September': 'сентября', 
-            'October': 'октября', 'November': 'ноября', 'December': 'декабря'
+            'January': 'Январь', 'February': 'Февраль', 'March': 'Март', 
+            'April': 'Апрель', 'May': 'Май', 'June': 'Июнь', 
+            'July': 'июля', 'August': 'августа', 'September': 'Сентябрь', 
+            'October': 'Октябрь', 'November': 'ноября', 'December': 'декабря'
         }
 
         # Map month totals using the localized month names
@@ -307,8 +307,8 @@ def show_data():
 
     # Prepare division list for filtering
     division_list = [{'code': d[0], 'name': d[1]} for d in results]
-
-    return render_template('show_data.html', data=pivot_table.to_dict(orient='records'), month_totals=month_totals, divisions=division_list)
+    return render_template('show_data.html', data=pivot_table.to_dict(orient='records'), month_totals=month_totals_localized, divisions=division_list)
+    # return render_template('show_data.html', data=pivot_table.to_dict(orient='records'), month_totals=month_totals, divisions=division_list)
 
 if __name__ == '__main__':
     app.run(debug=True)
