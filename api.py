@@ -1,6 +1,7 @@
 from flask import Blueprint, jsonify, request
 import pymysql
 import pandas as pd
+from datetime import datetime
 
 from config import MYSQL_CONFIG
 
@@ -33,20 +34,65 @@ def save_data():
     date_of_change = data.get('date')  # Get the date value
     modified_content = data.get('data', [])  # Get the modified content, default to an empty list if not provided
 
-    # Connect to the database and insert the data
+    # Get the year and month from the date
+    year_month = datetime.strptime(date_of_change, "%Y-%m-%d").strftime("%Y-%m")
+
     try:
         connection = pymysql.connect(**MYSQL_CONFIG)
         with connection.cursor() as cursor:
-            # Example of how to save the data (adjust according to your data structure)
+            # Check if any rows exist for the specified month
+            cursor.execute("SELECT COUNT(*) FROM sales WHERE DATE_FORMAT(date_of_change, '%%Y-%%m') = %s", (year_month,))
+            count = cursor.fetchone()[0]
+
+            if count > 0:
+                # Inform the user about existing data and ask for confirmation
+                return jsonify({
+                    "status": "warning",
+                    "message": f"Data for {year_month} already exists. Do you want to delete existing records and insert new ones?",
+                    "confirm_deletion": True  # Indicate that user confirmation is needed
+                })
+
+            # If no records exist, proceed to insert new data
             for entry in modified_content:
-                # Assuming entry is a dictionary with the required fields
                 cursor.execute("INSERT INTO sales (product, total, division_code, date_of_change) VALUES (%s, %s, %s, %s)",
                                (entry['Product'], entry['Total'], entry['Division'], date_of_change))  # Adjust as necessary
 
             connection.commit()
         return jsonify({"status": "success", "message": "Data saved successfully."})
+
     except pymysql.MySQLError as e:
         return jsonify({"status": "error", "message": str(e)})
+    
+    finally:
+        connection.close()
+
+# Additional route for deletion confirmation
+@api.route('/api/delete_and_save', methods=['POST'])
+def delete_and_save():
+    data = request.json
+    date_of_change = data.get('date')
+    modified_content = data.get('data', [])
+
+    year_month = datetime.strptime(date_of_change, "%Y-%m-%d").strftime("%Y-%m")
+
+    try:
+        connection = pymysql.connect(**MYSQL_CONFIG)
+        with connection.cursor() as cursor:
+            # Delete existing records for the specified month
+            cursor.execute("DELETE FROM sales WHERE DATE_FORMAT(date_of_change, '%%Y-%%m') = %s", (year_month,))
+            connection.commit()
+
+            # Insert new data
+            for entry in modified_content:
+                cursor.execute("INSERT INTO sales (product, total, division_code, date_of_change) VALUES (%s, %s, %s, %s)",
+                               (entry['Product'], entry['Total'], entry['Division'], date_of_change))
+
+            connection.commit()
+        return jsonify({"status": "success", "message": "Data deleted and new data saved successfully."})
+
+    except pymysql.MySQLError as e:
+        return jsonify({"status": "error", "message": str(e)})
+    
     finally:
         connection.close()
 

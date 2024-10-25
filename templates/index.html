@@ -82,6 +82,32 @@
                 });
 
                 const result = await response.json();
+
+                // Handle confirmation if records exist
+                if (result.status === 'warning' && result.confirm_deletion) {
+                    const userConfirmed = confirm(result.message);
+                    if (userConfirmed) {
+                        // User confirmed deletion, call the delete and save endpoint
+                        await deleteAndSaveData(selectedDate, modifiedContent);
+                    }
+                } else {
+                    alert(result.message);
+                    if (result.status === 'success') {
+                        window.location.href = '/show_data';  // Redirect to show_data page
+                    }
+                }
+            }
+
+            async function deleteAndSaveData(selectedDate, modifiedContent) {
+                const response = await fetch('/api/delete_and_save', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ date: selectedDate, data: modifiedContent }),
+                });
+
+                const result = await response.json();
                 alert(result.message);
                 if (result.status === 'success') {
                     window.location.href = '/show_data';  // Redirect to show_data page
