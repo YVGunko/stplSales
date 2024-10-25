@@ -5,15 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Show Data</title>
     <style>
-        table.data {
-            border-collapse: collapse;
-            width: 100%;
-        }
-        table.data th, table.data td {
-            border: 1px solid black;
-            padding: 8px;
-            text-align: left;
-        }
         .table-container {
             width: 100%;
             max-height: 360px; /* Set desired height */
@@ -21,6 +12,30 @@
             border: 1px solid #ccc; /* Optional border for the container */
             margin-top: 10px; /* Optional spacing */
         }
+
+        table.data {
+            border-collapse: collapse;
+            width: 100%;
+        }
+
+        table.data th, table.data td {
+            border: 1px solid black;
+            padding: 8px;
+            text-align: left;
+        }
+
+        thead th {
+            position: sticky; /* Enable sticky positioning */
+            top: 0; /* Set the top position */
+            background: #fff; /* Set background color for visibility */
+            z-index: 1; /* Ensure the header is above the content */
+        }
+
+        .bold {
+            font-weight: bold; /* Make total row bold */
+            background-color: #f0f0f0; /* Optional: Highlight the total row */
+        }
+
         select {
             font-size: 16px; /* Adjust font size */
             padding: 5px; /* Add some padding */
@@ -37,14 +52,14 @@
     <div>
         <label for="division-select">Filter by Division:</label>
         <select id="division-select" onchange="filterData()">
-            <option value="">All Divisions</option> <!-- Default unfiltered option -->
+            <option value="">Все подразделения</option> <!-- Default unfiltered option -->
             <!-- Options will be populated dynamically -->
         </select>
 
         <button onclick="sortData('total')">Sort by Total</button>
         <button onclick="sortData('product')">Sort by Product</button>
-        <button onclick="sortData('division_total')">Sort by Division and Total</button> <!-- New button -->
-        <button onclick="sortData('division_product')">Sort by Division and Product</button> <!-- New button -->
+        <button onclick="sortData('division_total')">Sort by Division and Total</button>
+        <button onclick="sortData('division_product')">Sort by Division and Product</button>
     </div>
 
     <div class="table-container">
@@ -52,21 +67,30 @@
             <thead>
                 <tr>
                     <th>Product</th>
-                    <th>Division</th> <!-- Division name displayed here -->
-                    {% for date in data[0].keys() if date not in ['Product', 'Division'] %}
-                        <th>{{ date }}</th>
+                    <th>Division</th>
+                    {% for month in month_totals.keys() %}
+                        <th>{{ month }}</th>
                     {% endfor %}
                 </tr>
-            </thead>
+            </thead>            
             <tbody>
                 {% for row in data %}
-                    <tr>
-                        <td>{{ row.Product }}</td>
-                        <td>{{ row.Division }}</td> <!-- Division name displayed here -->
-                        {% for date in data[0].keys() if date not in ['Product', 'Division'] %}
-                            <td>{{ row[date] }}</td>
-                        {% endfor %}
-                    </tr>
+                    {% if row.Total_Row %}
+                        <tr class="bold">
+                            <td colspan="2">! Итого:</td>
+                            {% for month in month_totals.keys() %}
+                                <td>{{ month_totals[month] }}</td>
+                            {% endfor %}
+                        </tr>
+                    {% else %}
+                        <tr>
+                            <td>{{ row.Product }}</td>
+                            <td>{{ row.Division }}</td>
+                            {% for month in month_totals.keys() %}
+                                <td>{{ row[month|capitalize] }}</td>
+                            {% endfor %}
+                        </tr>
+                    {% endif %}
                 {% endfor %}
             </tbody>
         </table>
@@ -80,7 +104,7 @@
                 const divisions = await response.json();
                 
                 const divisionSelect = document.getElementById('division-select');
-                divisionSelect.innerHTML = '<option value="">All Divisions</option>'; // Reset options
+                divisionSelect.innerHTML = '<option value="">Все подразделения</option>'; // Reset options
                 divisions.forEach(division => {
                     const option = document.createElement('option');
                     option.value = division[0]; // Assuming 'code' is at index 0
@@ -101,7 +125,7 @@
             const rows = table.getElementsByTagName('tbody')[0].rows;
 
             for (let row of rows) {
-                const divisionCell = row.cells[1].innerText; // Division name is now in the second column
+                const divisionCell = row.cells[1]?.innerText; // Division name is now in the second column
                 const rowDivisionCode = getDivisionCodeFromName(divisionCell); // Convert name back to code for comparison
                 if (divisionCode === "" || rowDivisionCode === divisionCode) {
                     row.style.display = ""; // Show row
@@ -148,7 +172,7 @@
                     return divisionA > divisionB ? 1 : -1; // Otherwise sort by Division
                 } else if (order === 'division_product') {
                     let productA = a.cells[0].innerText.toLowerCase();
-                    let productB = b.cells[0].innerText.toLowerCase();
+                    let productB = a.cells[0].innerText.toLowerCase();
                     if (divisionA === divisionB) {
                         return productA > productB ? 1 : -1; // If divisions are equal, sort by Product
                     }

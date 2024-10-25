@@ -3,7 +3,10 @@ import pandas as pd
 import pymysql
 import numpy as np
 import json
+import locale
 from datetime import datetime
+
+locale.setlocale(locale.LC_TIME, 'ru_RU.UTF-8')
 
 from config import MYSQL_CONFIG
 from api import api  # Import the API blueprint
@@ -235,11 +238,17 @@ def save_data():
 @app.route('/show_data', methods=['GET'])
 def show_data():
     try:
+        # Set locale for month names
+        locale.setlocale(locale.LC_TIME, 'ru_RU.UTF-8')
+        print('Current locale:', locale.getlocale(locale.LC_TIME))
+
         connection = pymysql.connect(**MYSQL_CONFIG)
         with connection.cursor() as cursor:
-            # Fetch divisions with names
+            # Fetch divisions with names, extracting month names and numbers
             query = """
-                SELECT s.product, s.total, d.name AS division_name, s.date_of_change 
+                SELECT s.product, s.total, d.name AS division_name, 
+                       DATE_FORMAT(s.date_of_change, '%M') AS month_name,
+                       MONTH(s.date_of_change) AS month_number
                 FROM sales s
                 JOIN division d ON s.division_code = d.code
             """
@@ -247,35 +256,59 @@ def show_data():
             results = cursor.fetchall()  
 
         # Convert results to DataFrame
-        columns = ['Product', 'Total', 'Division', 'Date of Change']  
+        columns = ['Product', 'Total', 'Division', 'Month', 'Month Number']
         data = pd.DataFrame(results, columns=columns)
 
         # Pivot the DataFrame
         pivot_table = data.pivot_table(
             index=['Product', 'Division'],  
-            columns='Date of Change',  
+            columns='Month',  
             values='Total', 
             aggfunc='sum',  
             fill_value=0  
+        )
+
+        # Sort the pivot table columns based on month number
+        pivot_table = pivot_table.reindex(
+            sorted(pivot_table.columns, key=lambda x: data[data['Month'] == x]['Month Number'].values[0]),
+            axis=1
         )
 
         pivot_table.reset_index(inplace=True)
 
         # Add a summary row
         summary_row = pivot_table.sum(numeric_only=True)
-        summary_row['Product'] = 'Total'
+        summary_row['Product'] = '! Итого:'
         summary_row['Division'] = ''
-        # Use pd.concat instead of append
-        pivot_table = pd.concat([pivot_table, summary_row.to_frame().T], ignore_index=True)
+        pivot_table = pd.concat([summary_row.to_frame().T, pivot_table], ignore_index=True)
+
+        # Add a flag to identify the total row
+        pivot_table['Total Row'] = pivot_table['Product'] == '! Итого:'
+
+        # Calculate month totals for passing to the template
+        month_totals = pivot_table.drop(columns=['Product', 'Division', 'Total Row']).sum().to_dict()
+        print('month_totals: ' + str(month_totals))  # Debugging line
+
+        # Create a mapping from English month names to Russian month names
+        month_mapping = {
+            'January': 'января', 'February': 'февраля', 'March': 'марта', 
+            'April': 'апреля', 'May': 'мая', 'June': 'июня', 
+            'July': 'июля', 'August': 'августа', 'September': 'сентября', 
+            'October': 'октября', 'November': 'ноября', 'December': 'декабря'
+        }
+
+        # Map month totals using the localized month names
+        month_totals_localized = {month_mapping[month]: month_totals[month] for month in month_totals if month in month_mapping}
+
+        print('final month_totals: ' + str(month_totals_localized))  # Debugging line
 
     except pymysql.MySQLError as e:
         return render_template('show_data.html', error=str(e), data=[], divisions=[])
 
     # Prepare division list for filtering
-    division_list = [{'code': d[0], 'name': d[1]} for d in results]  # Adjust as needed
+    division_list = [{'code': d[0], 'name': d[1]} for d in results]
 
-    return render_template('show_data.html', data=pivot_table.to_dict(orient='records'), divisions=division_list)
-
+    return render_template('show_data.html', data=pivot_table.to_dict(orient='records'), month_totals=month_totals, divisions=division_list)
 
 if __name__ == '__main__':
     app.run(debug=True)
