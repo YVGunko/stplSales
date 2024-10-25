@@ -3,6 +3,7 @@ import pandas as pd
 import pymysql
 import numpy as np
 import json
+from datetime import datetime
 
 from config import MYSQL_CONFIG
 from api import api  # Import the API blueprint
@@ -38,12 +39,13 @@ def read_excel(file):
 def index():
     global uploaded_df
     message = ""
+    current_year = datetime.now().year  # Get the current year
     if request.method == 'POST':
         file = request.files['file']
         
         if not check_db_connection():
             message = 'Database connection failed.'
-            return render_template('index.html', status=message)
+            return render_template('index.html', current_year=current_year, status=message)
 
         # Define the range of rows you want to read
         start_exel_row = 1  # Adjust this to your desired starting row (0-indexed)
@@ -76,7 +78,7 @@ def index():
         json_dumps=json.dumps(modified_df.to_dict(orient='records'))
         print(json_dumps)
 
-        return render_template('index.html', 
+        return render_template('index.html', current_year=current_year, 
                                status='File uploaded successfully!', 
                                uploaded_file=uploaded_df.to_html(classes='data', header="true", index=False),
                                modified_content=modified_df.to_html(classes='data', header="true", index=False),

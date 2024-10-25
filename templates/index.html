@@ -25,11 +25,12 @@
 </head>
 <body>
     <h1>Upload and Analyze XLSX File</h1>
-    <form action="/" method="post" enctype="multipart/form-data">
-        <input type="file" name="file" accept=".xlsx,.xls" required>
-        <button type="submit">Upload</button>
+    <form action="/" method="post" enctype="multipart/form-data" style="display: flex; align-items: center;">
+        <input type="file" name="file" accept=".xlsx,.xls" required style="margin-right: 10px;">
+        <button type="submit" style="margin-right: 10px;">Upload</button>
+        <p id="status" style="margin: 0;">{{ status }}</p>
     </form>
-    <p id="status">{{ status }}</p>
+    
 
     {% if uploaded_file %}
         <h2>Uploaded File Content</h2>
@@ -44,10 +45,23 @@
             <div>{{ modified_content|safe }}</div>
         </div>
 
-        <div>{{ modified_content_json|safe }}</div>
-
-        <label for="dateInput">Select Date:</label>
-        <input type="date" id="dateInput" onchange="toggleSaveButton()">
+        <label for="monthInput">Select Month:</label>
+        <select id="monthInput" onchange="toggleSaveButton()">
+            <option value="">--Select Month--</option>
+            <!-- Populate month options -->
+            {% for month in range(1, 13) %}
+                <option value="{{ month }}">{{ month }}</option>
+            {% endfor %}
+        </select>
+        
+        <label for="yearInput">Select Year:</label>
+        <select id="yearInput" onchange="toggleSaveButton()">
+            <option value="">--Select Year--</option>
+            <!-- Populate year options, adjust as needed -->
+            {% for year in range(current_year - 5, current_year + 1) %}
+                <option value="{{ year }}">{{ year }}</option>
+            {% endfor %}
+        </select>
 
         <button id="saveButton" onclick="saveData()" disabled>Save on Server</button>
 
@@ -64,15 +78,37 @@
                 console.error("Failed to parse JSON:", e);
             }
 
-            // Function to toggle the save button based on date input
+            // Function to toggle the save button based on month and year input
             function toggleSaveButton() {
-                const dateInput = document.getElementById('dateInput').value;
+                const monthInput = document.getElementById('monthInput').value;
+                const yearInput = document.getElementById('yearInput').value;
                 const saveButton = document.getElementById('saveButton');
-                saveButton.disabled = !dateInput; // Disable if dateInput is empty
+                saveButton.disabled = !(monthInput && yearInput); // Enable if both inputs have values
             }
 
+            // Pre-fill the month and year inputs on page load
+            document.addEventListener('DOMContentLoaded', () => {
+                const now = new Date();
+                const monthInput = document.getElementById('monthInput');
+                const yearInput = document.getElementById('yearInput');
+
+                // Set the current month (JavaScript months are 0-indexed)
+                monthInput.value = now.getMonth() + 1; // +1 to convert from 0-indexed to 1-indexed
+                // Set the current year
+                yearInput.value = now.getFullYear();
+                
+                // Enable the save button if both month and year are selected
+                toggleSaveButton();
+            });
+
             async function saveData() {
-                const selectedDate = document.getElementById('dateInput').value; // Get the selected date
+                const month = document.getElementById('monthInput').value; // Get the selected month
+                const year = document.getElementById('yearInput').value; // Get the selected year
+                
+                // Determine the last day of the month
+                const lastDay = new Date(year, month, 0).getDate();
+                const selectedDate = `${year}-${month.padStart(2, '0')}-${lastDay}`; // Format: YYYY-MM-DD
+
                 const response = await fetch('/api/save', {
                     method: 'POST',
                     headers: {
