@@ -51,7 +51,7 @@ def index():
             return render_template('index.html', current_year=current_year, status=message)
 
         # Define the range of rows you want to read
-        start_exel_row = 1  # Adjust this to your desired starting row (0-indexed)
+        start_exel_row = 1100  # Adjust this to your desired starting row (0-indexed)
         num_rows = 100  # Number of rows to read
 
         # Read the specific range of rows from the Excel file
@@ -238,7 +238,7 @@ def save_data():
 @app.route('/show_data', methods=['GET'])
 def show_data():
     try:
-        # Set locale for month names
+        # Set locale for month names (if needed elsewhere, else can be removed)
         locale.setlocale(locale.LC_TIME, 'ru_RU.UTF-8')
         print('Current locale:', locale.getlocale(locale.LC_TIME))
 
@@ -285,30 +285,13 @@ def show_data():
         # Add a flag to identify the total row
         pivot_table['Total Row'] = pivot_table['Product'] == '! Итого:'
 
-        # Calculate month totals for passing to the template
-        month_totals = pivot_table.drop(columns=['Product', 'Division', 'Total Row']).sum().to_dict()
-        print('month_totals: ' + str(month_totals))  # Debugging line
-
-        # Create a mapping from English month names to Russian month names
-        month_mapping = {
-            'January': 'Январь', 'February': 'Февраль', 'March': 'Март', 
-            'April': 'Апрель', 'May': 'Май', 'June': 'Июнь', 
-            'July': 'июля', 'August': 'августа', 'September': 'Сентябрь', 
-            'October': 'Октябрь', 'November': 'ноября', 'December': 'декабря'
-        }
-
-        # Map month totals using the localized month names
-        month_totals_localized = {month_mapping[month]: month_totals[month] for month in month_totals if month in month_mapping}
-
-        print('final month_totals: ' + str(month_totals_localized))  # Debugging line
-
     except pymysql.MySQLError as e:
         return render_template('show_data.html', error=str(e), data=[], divisions=[])
 
     # Prepare division list for filtering
     division_list = [{'code': d[0], 'name': d[1]} for d in results]
-    return render_template('show_data.html', data=pivot_table.to_dict(orient='records'), month_totals=month_totals_localized, divisions=division_list)
-    # return render_template('show_data.html', data=pivot_table.to_dict(orient='records'), month_totals=month_totals, divisions=division_list)
+
+    return render_template('show_data.html', data=pivot_table.to_dict(orient='records'), divisions=division_list)
 
 if __name__ == '__main__':
     app.run(debug=True)
