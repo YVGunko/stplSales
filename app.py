@@ -55,8 +55,8 @@ def index():
         num_rows = 100  # Number of rows to read
 
         # Read the specific range of rows from the Excel file
-        uploaded_df = pd.read_excel(file, skiprows=start_exel_row, nrows=num_rows)
         # uploaded_df = pd.read_excel(file, skiprows=start_exel_row, nrows=num_rows)
+        uploaded_df = pd.read_excel(file)
 
         #print("Before sorting:")
         #print(uploaded_df)
@@ -124,8 +124,8 @@ def describe_division(second_column_content):
     if len(division_code) == 1:
         return division_code[0][0]  # Return the division_code
 
-    # Return an empty string if there are no results or more than one result
-    return ""
+    # Return "0" string if there are no results or more than one result
+    return "0"
 
 def get_patterns_from_db():
     """Fetch patterns and their corresponding divisions from the MySQL database."""
@@ -146,6 +146,8 @@ def get_patterns_from_db():
 
 def prepare_exel_content(second_column_content):
     if isinstance(second_column_content, str):
+        if 'ПОДОШВА ПУ ' in second_column_content:
+            second_column_content = second_column_content.replace('ПОДОШВА ПУ ', '')  # replace
         if 'ПОДОШВА ' in second_column_content:
             second_column_content = second_column_content.replace('ПОДОШВА ', '')  # replace
         if '(' in second_column_content:
