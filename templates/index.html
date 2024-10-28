@@ -16,7 +16,7 @@
         }
         .table-container {
             width: 100%;
-            max-height: 360px; /* Set desired height */
+            max-height: fit-content; /* Set desired height */
             overflow-y: auto;   /* Enable vertical scrolling */
             border: 1px solid #ccc; /* Optional border for the container */
             margin-top: 10px; /* Optional spacing */
@@ -37,6 +37,13 @@
         <div class="table-container">
             <div>{{ uploaded_file|safe }}</div>
         </div>
+    {% endif %}
+    
+    {% if modified_content %}
+        <form action="/edit" method="post">
+            <input type="hidden" name="modified_content" value="{{ modified_content|tojson }}">
+            <button type="submit">Edit Modified Content</button>
+        </form>
     {% endif %}
 
     {% if modified_content %}

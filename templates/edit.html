@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edit Modified Content</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/handsontable/dist/handsontable.full.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/handsontable/dist/handsontable.full.min.js"></script>
+    <style>
+        #editable-table {
+            width: 100%;
+            height: calc(100vh - 200px); /* Adjust height for better fit */
+            overflow: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>Edit Modified Content</h1>
+    <div id="editable-table"></div>
+    <button id="saveButton" onclick="saveData()">Save to Database</button>
+
+    <script>
+        const modifiedContent = JSON.parse('{{ modified_content_json|safe }}');
+
+        const container = document.getElementById('editable-table');
+        const hot = new Handsontable(container, {
+            data: modifiedContent,
+            colHeaders: ['Product', 'Division', 'Total'], // Update these headers based on your DataFrame
+            columns: [
+                { data: 'Product', type: 'text' },
+                { data: 'Division', type: 'text' },
+                { data: 'Total', type: 'numeric' }
+            ],
+        });
+
+        async function saveData() {
+            const response = await fetch('/api/save', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ data: hot.getData() }),
+            });
+
+            const result = await response.json();
+            alert(result.message);
+        }
+    </script>
+</body>
+</html>
