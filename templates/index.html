@@ -3,6 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/handsontable/dist/handsontable.full.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/handsontable/dist/handsontable.full.min.js"></script>
+
     <title>Excel Analyzer</title>
     <style>
         body {
@@ -13,6 +16,7 @@
         }
         .left-panel, .right-panel {
             width: 48%; /* Adjust widths as needed */
+            height: 90vh; /* Use viewport height for responsiveness */
         }
         table.data {
             width: 100%; /* Full width */
@@ -30,13 +34,24 @@
                 font-size: 14px; /* Smaller font size */
             }
         }
-        .table-container {
+        .table-container-left {
             width: 100%; /* Full width */
-            max-height: 90vh; /* Use viewport height for responsiveness */
+            max-height: 75%; /* Use viewport height for responsiveness */
             overflow-y: auto; /* Enable vertical scrolling */
             overflow-x: auto; /* Enable horizontal scrolling */
             border: 1px solid #ccc;
             margin-top: 10px;
+            margin-bottom: 10px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1); /* Optional shadow */
+        }
+        .table-container-right {
+            width: 100%; /* Full width */
+            max-height: 85%; /* Use viewport height for responsiveness */
+            overflow-y: auto; /* Enable vertical scrolling */
+            overflow-x: auto; /* Enable horizontal scrolling */
+            border: 1px solid #ccc;
+            margin-top: 10px;
+            margin-bottom: 10px;
             box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1); /* Optional shadow */
         }
     </style>
@@ -52,24 +67,15 @@
 
         {% if uploaded_file %}
             <h2>Uploaded File Content</h2>
-            <button id="analyzeButton" onclick="analyzeData()">Analyze</button>
-            <script>                
-                async function analyzeData() {
-                    // Logic to process analysis
-                }
-            </script>
-            <div class="table-container">
+            <div class="table-container-left">
                 <div>{{ uploaded_file|safe }}</div>
             </div>
         {% endif %}
     </div>
+    {% if modified_content_json %}
     <div class="right-panel">
-        {% if modified_content %}
-        <h2>Modified Content</h2>
-        <div class="table-container">
-            <div>{{ modified_content|safe }}</div>
-        </div>
 
+        <h2>Modified Content</h2>
         <label for="monthInput">Select Month:</label>
         <select id="monthInput" onchange="toggleSaveButton()">
             <option value="">--Select Month--</option>
@@ -89,19 +95,14 @@
         </select>
 
         <button id="saveButton" onclick="saveData()" disabled>Save on Server</button>
+        <div id="modifiedContentContainer" class="table-container-right" style="display: none;">
+            <div id="modifiedContentTable"></div>
+        </div>
     </div>
+    {% endif %}
         <script>
-            // Initialize modifiedContent with an empty array
-            let modifiedContent = [];
-        
-            try {
-                const jsonString = '{{ modified_content_json|safe }}';
-                if (jsonString) {
-                    modifiedContent = JSON.parse(jsonString);
-                }
-            } catch (e) {
-                console.error("Failed to parse JSON:", e);
-            }
+            let modifiedContentJson = [];
+            let modifiedContentTable;
 
             // Function to toggle the save button based on month and year input
             function toggleSaveButton() {
@@ -113,6 +114,19 @@
 
             // Pre-fill the month and year inputs on page load
             document.addEventListener('DOMContentLoaded', () => {
+                const modifiedContentJson = '{{ modified_content_json|safe }}';
+                const jsonData = modifiedContentJson ? JSON.parse(modifiedContentJson) : [];
+
+                // Initialize Handsontable
+                modifiedContentTable = new Handsontable(document.getElementById('modifiedContentTable'), {
+                    data: jsonData,
+                    colHeaders: true,
+                    rowHeaders: true,
+                    width: '100%',
+                    height: '300',
+                    licenseKey: 'non-commercial-and-evaluation',
+                });
+
                 const now = new Date();
                 const monthInput = document.getElementById('monthInput');
                 const yearInput = document.getElementById('yearInput');
@@ -134,12 +148,15 @@
                 const lastDay = new Date(year, month, 0).getDate();
                 const selectedDate = `${year}-${month.padStart(2, '0')}-${lastDay}`; // Format: YYYY-MM-DD
 
+                const modifiedData = modifiedContentTable.getData(); // Get the edited data
+                const jsonData = JSON.stringify(modifiedData); // Convert to JSON
+
                 const response = await fetch('/api/save', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ date: selectedDate, data: modifiedContent }),
+                    body: JSON.stringify({ date: selectedDate, data: jsonData }),
                 });
 
                 const result = await response.json();
@@ -149,7 +166,7 @@
                     const userConfirmed = confirm(result.message);
                     if (userConfirmed) {
                         // User confirmed deletion, call the delete and save endpoint
-                        await deleteAndSaveData(selectedDate, modifiedContent);
+                        await deleteAndSaveData(selectedDate, jsonData);
                     }
                 } else {
                     alert(result.message);
@@ -159,13 +176,13 @@
                 }
             }
 
-            async function deleteAndSaveData(selectedDate, modifiedContent) {
+            async function deleteAndSaveData(selectedDate, dataToSave) {
                 const response = await fetch('/api/delete_and_save', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ date: selectedDate, data: modifiedContent }),
+                    body: JSON.stringify({ date: selectedDate, data: dataToSave }),
                 });
 
                 const result = await response.json();
@@ -175,6 +192,6 @@
                 }
             }
         </script>
-    {% endif %}
+
 </body>
 </html>
