@@ -5,41 +5,66 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Excel Analyzer</title>
     <style>
+        body {
+            display: flex;
+            justify-content: space-between;
+            margin: 20px;
+            flex-wrap: wrap; /* Allow wrapping on smaller screens */
+        }
+        .left-panel, .right-panel {
+            width: 48%; /* Adjust widths as needed */
+        }
         table.data {
-            border-collapse: collapse;
-            width: 100%;
+            width: 100%; /* Full width */
+            border-collapse: collapse; /* Collapse borders */
+            table-layout: auto; /* Automatic column sizing */
         }
         table.data th, table.data td {
             border: 1px solid black;
-            padding: 8px;
-            text-align: left;
+            padding: 8px; /* Cell padding */
+            text-align: left; /* Align text left */
+        }
+        @media (max-width: 768px) {
+            table.data th, table.data td {
+                padding: 6px; /* Smaller padding */
+                font-size: 14px; /* Smaller font size */
+            }
         }
         .table-container {
-            width: 100%;
-            max-height: 360px; /* Set desired height */
-            overflow-y: auto;   /* Enable vertical scrolling */
-            border: 1px solid #ccc; /* Optional border for the container */
-            margin-top: 10px; /* Optional spacing */
+            width: 100%; /* Full width */
+            max-height: 90vh; /* Use viewport height for responsiveness */
+            overflow-y: auto; /* Enable vertical scrolling */
+            overflow-x: auto; /* Enable horizontal scrolling */
+            border: 1px solid #ccc;
+            margin-top: 10px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1); /* Optional shadow */
         }
     </style>
 </head>
 <body>
-    <h1>Upload and Analyze XLSX File</h1>
-    <form action="/" method="post" enctype="multipart/form-data" style="display: flex; align-items: center;">
-        <input type="file" name="file" accept=".xlsx,.xls" required style="margin-right: 10px;">
-        <button type="submit" style="margin-right: 10px;">Upload</button>
-        <p id="status" style="margin: 0;">{{ status }}</p>
-    </form>
-    
+    <div class="left-panel">
+        <h1>Upload XLSX File</h1>
+        <form action="/" method="post" enctype="multipart/form-data" style="display: flex; flex-direction: column;">
+            <input type="file" name="file" accept=".xlsx,.xls" required>
+            <button type="submit" style="margin-top: 10px;">Upload</button>
+            <p id="status" style="margin: 0;">{{ status }}</p>
+        </form>
 
-    {% if uploaded_file %}
-        <h2>Uploaded File Content</h2>
-        <div class="table-container">
-            <div>{{ uploaded_file|safe }}</div>
-        </div>
-    {% endif %}
-
-    {% if modified_content %}
+        {% if uploaded_file %}
+            <h2>Uploaded File Content</h2>
+            <button id="analyzeButton" onclick="analyzeData()">Analyze</button>
+            <script>                
+                async function analyzeData() {
+                    // Logic to process analysis
+                }
+            </script>
+            <div class="table-container">
+                <div>{{ uploaded_file|safe }}</div>
+            </div>
+        {% endif %}
+    </div>
+    <div class="right-panel">
+        {% if modified_content %}
         <h2>Modified Content</h2>
         <div class="table-container">
             <div>{{ modified_content|safe }}</div>
@@ -64,7 +89,7 @@
         </select>
 
         <button id="saveButton" onclick="saveData()" disabled>Save on Server</button>
-
+    </div>
         <script>
             // Initialize modifiedContent with an empty array
             let modifiedContent = [];

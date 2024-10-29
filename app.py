@@ -55,16 +55,7 @@ def index():
             message = 'Database connection failed.'
             return render_template('index.html', current_year=current_year, status=message)
 
-        # Define the range of rows you want to read
-        # start_exel_row = 297  # Adjust this to your desired starting row (0-indexed)
-        # num_rows = 10  # Number of rows to read
-
-        # Read the specific range of rows from the Excel file
-        # uploaded_df = pd.read_excel(file, skiprows=start_exel_row, nrows=num_rows)
         uploaded_df = pd.read_excel(file)
-
-        #print("Before sorting:")
-        #print(uploaded_df)
 
         # Call prepare_excel with the uploaded DataFrame
         modified_excel_df = pd.DataFrame(prepare_excel(uploaded_df) , columns=[first_column_name, second_column_name])
@@ -74,8 +65,6 @@ def index():
         # If you want to reset the index after reading
         modified_excel_df.reset_index(drop=True, inplace=True)
 
-        #print("After sorting:")
-        #print(modified_excel_df)
 
         # Call analyze_excel with the uploaded DataFrame
         modified_content = analyze_excel(modified_excel_df) 
