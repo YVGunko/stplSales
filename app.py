@@ -1,9 +1,11 @@
-from flask import Flask, jsonify, request, render_template
+from io import BytesIO
+from flask import Flask, jsonify, request, render_template, send_file, session
 import pandas as pd
 import pymysql
 import numpy as np
 import json
 import locale
+import os
 from datetime import datetime
 
 locale.setlocale(locale.LC_TIME, 'ru_RU.UTF-8')
@@ -14,6 +16,9 @@ from api import api  # Import the API blueprint
 app = Flask(__name__)
 
 app.register_blueprint(api)
+
+# Set the secret key to a random bytes string
+app.secret_key = os.urandom(24)  # Generates a random 24-byte key
 
 # Global variable to store DataFrame
 uploaded_df = None
@@ -51,8 +56,8 @@ def index():
             return render_template('index.html', current_year=current_year, status=message)
 
         # Define the range of rows you want to read
-        start_exel_row = 1100  # Adjust this to your desired starting row (0-indexed)
-        num_rows = 100  # Number of rows to read
+        # start_exel_row = 297  # Adjust this to your desired starting row (0-indexed)
+        # num_rows = 10  # Number of rows to read
 
         # Read the specific range of rows from the Excel file
         # uploaded_df = pd.read_excel(file, skiprows=start_exel_row, nrows=num_rows)
@@ -95,10 +100,12 @@ def query_database(data):
         conn = pymysql.connect(**MYSQL_CONFIG)
         cursor = conn.cursor()
 
-        # Prepare the query to search for the nomenclature
-        query = "SELECT DISTINCT division_code FROM master_data WHERE nomenklature LIKE '{s}%'".format(s=data)
-        # query = "SELECT division_code FROM product WHERE name LIKE '{s}%'".format(s=data)
+        query = "SELECT division_code FROM sales_product_paterns WHERE product = '{s}' ".format(s=data)
         cursor.execute(query)  # Pass the entire content as a parameter
+        if cursor.rowcount == 0:
+            query = "SELECT DISTINCT division_code FROM master_data WHERE nomenklature LIKE '{s}%'".format(s=data)
+            # query = "SELECT division_code FROM product WHERE name LIKE '{s}%'".format(s=data)
+            cursor.execute(query)  # Pass the entire content as a parameter
 
         results = cursor.fetchall()  # Fetch all results
 
@@ -111,19 +118,17 @@ def query_database(data):
 
 def describe_division(second_column_content):
     global patterns_divisions_dict
-
-    # Check if the second_column_content matches any pattern
-    for pattern in patterns_divisions_dict:
-        if pattern in second_column_content:
-            return patterns_divisions_dict[pattern]  # Return the corresponding division
-
-    # If no match found, query the database with second_column_content+SPACE
+    # Query the database with second_column_content+SPACE
     division_code = query_database(second_column_content+" ")
     
     # If the query returns one result, return the division code
     if len(division_code) == 1:
         return division_code[0][0]  # Return the division_code
-
+    
+    # Check if the second_column_content matches any pattern
+    for pattern in patterns_divisions_dict:
+        if pattern in second_column_content:
+            return patterns_divisions_dict[pattern]  # Return the corresponding division
     # Return "0" string if there are no results or more than one result
     return "0"
 
@@ -144,10 +149,23 @@ def get_patterns_from_db():
     finally:
         connection.close()
 
+def contains_substring_no_space(s, substring):
+    index = s.find(substring)
+    if index == -1:
+        return False
+    # Check if the character before the substring is a space or if it's at the start of the string
+    if index == 0 or s[index - 1] != ' ':
+        return True
+    return False
+
 def prepare_exel_content(second_column_content):
     if isinstance(second_column_content, str):
         if 'ПОДОШВА ПУ ' in second_column_content:
             second_column_content = second_column_content.replace('ПОДОШВА ПУ ', '')  # replace
+        if 'ПОДОШВА ТЭП ' in second_column_content:
+            second_column_content = second_column_content.replace('ПОДОШВА ТЭП ', '')  # replace
+        if 'ПОДОШВА ЭВА ' in second_column_content:
+            second_column_content = second_column_content.replace('ПОДОШВА ЭВА ', '')  # replace
         if 'ПОДОШВА ' in second_column_content:
             second_column_content = second_column_content.replace('ПОДОШВА ', '')  # replace
         if '(' in second_column_content:
@@ -207,7 +225,7 @@ def analyze_excel(df):
         substring = product_content[:first_space_index] if first_space_index != -1 else product_content
         
         # Look up for division
-        division = describe_division(substring) if first_space_index != -1 else ""
+        division = describe_division(substring) if substring else "0"
 
         # Initialize the total sum with the current row's fourth column value
         total_sum = number_content
@@ -241,7 +259,7 @@ def save_data():
 def show_data():
     try:
         # Set locale for month names (if needed elsewhere, else can be removed)
-        locale.setlocale(locale.LC_TIME, 'ru_RU.UTF-8')
+        locale.setlocale(locale.LC_TIME, '')
         print('Current locale:', locale.getlocale(locale.LC_TIME))
 
         connection = pymysql.connect(**MYSQL_CONFIG)
@@ -287,6 +305,12 @@ def show_data():
         # Add a flag to identify the total row
         pivot_table['Total Row'] = pivot_table['Product'] == '! Итого:'
 
+        # Extract total values
+        total_row = pivot_table[pivot_table['Total Row']].iloc[0]  # Get the first total row
+        
+        # Store necessary total data in the session (if needed)
+        session['total_row'] = total_row[2:].to_dict()  # Store only month totals
+
     except pymysql.MySQLError as e:
         return render_template('show_data.html', error=str(e), data=[], divisions=[])
 
@@ -294,6 +318,59 @@ def show_data():
     division_list = [{'code': d[0], 'name': d[1]} for d in results]
 
     return render_template('show_data.html', data=pivot_table.to_dict(orient='records'), divisions=division_list)
+
+@app.route('/export')
+def export():
+    try:
+        # Connect to the database
+        connection = pymysql.connect(**MYSQL_CONFIG)
+        with connection.cursor() as cursor:
+            # Fetch the complete sales data
+            query = """
+                SELECT s.product, s.total, d.name AS division_name, 
+                       DATE_FORMAT(s.date_of_change, '%M') AS month_name,
+                       MONTH(s.date_of_change) AS month_number
+                FROM sales s
+                JOIN division d ON s.division_code = d.code
+            """
+            cursor.execute(query)
+            results = cursor.fetchall()
+
+        # Convert results to DataFrame
+        columns = ['Product', 'Total', 'Division', 'Month', 'Month Number']
+        data = pd.DataFrame(results, columns=columns)
+
+        # Pivot the DataFrame
+        pivot_table = data.pivot_table(
+            index=['Product', 'Division'],  
+            columns='Month',  
+            values='Total', 
+            aggfunc='sum',  
+            fill_value=0  
+        )
+
+        # Sort the pivot table columns based on month number
+        pivot_table = pivot_table.reindex(
+            sorted(pivot_table.columns, key=lambda x: data[data['Month'] == x]['Month Number'].values[0]),
+            axis=1
+        )
+
+        # Convert the final pivot table to a DataFrame for export
+        final_data = pivot_table.reset_index()
+
+        # Export to Excel
+        output_path = 'full_data_with_totals.xlsx'
+        final_data.to_excel(output_path, index=False)
+
+        # Return the file for download
+        return send_file(output_path, as_attachment=True)
+
+    except pymysql.MySQLError as e:
+        return str(e), 500  # Database error handling
+
+    except Exception as e:
+        return str(e), 500  # General error handling
+
 
 if __name__ == '__main__':
     app.run(debug=True)

@@ -7,7 +7,7 @@
     <style>
         .table-container {
             width: 100%;
-            max-height: 360px; /* Set desired height */
+            max-height: fit-content; /* Set desired height */
             overflow-y: auto;   /* Enable vertical scrolling */
             border: 1px solid #ccc; /* Optional border for the container */
             margin-top: 10px; /* Optional spacing */
@@ -60,6 +60,8 @@
         <button onclick="sortData('product')">Sort by Product</button>
         <button onclick="sortData('division_total')">Sort by Division and Total</button>
         <button onclick="sortData('division_product')">Sort by Division and Product</button>
+        <!-- Other buttons -->
+        <button onclick="exportToExcel()">Export to Excel</button>
     </div>
 
     <div class="table-container">
@@ -119,6 +121,27 @@
         // Call fetchDivisions on page load
         document.addEventListener('DOMContentLoaded', fetchDivisions);
 
+        function exportToExcel() {
+            fetch('/export', {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            })
+            .then(response => response.blob())
+            .then(blob => {
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'data_export.xlsx'; // Filename for the download
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                window.URL.revokeObjectURL(url);
+            })
+            .catch(error => console.error('Error exporting to Excel:', error));
+        }
+        
         function filterData() {
             const divisionCode = document.getElementById('division-select').value;
             const table = document.getElementById('data-table');
@@ -235,18 +258,18 @@
         // Localize month names
         function localizeMonths() {
             const monthMapping = {
-                'January': 'января', 
-                'February': 'февраля', 
-                'March': 'марта', 
-                'April': 'апреля', 
-                'May': 'мая', 
-                'June': 'июня', 
-                'July': 'июля', 
-                'August': 'августа', 
-                'September': 'сентября', 
-                'October': 'октября', 
-                'November': 'ноября', 
-                'December': 'декабря'
+                'January': 'Январь', 
+                'February': 'Февраль', 
+                'March': 'Март', 
+                'April': 'Апрель', 
+                'May': 'Мая', 
+                'June': 'Июнь', 
+                'July': 'Июль', 
+                'August': 'Август', 
+                'September': 'Сентябрь', 
+                'October': 'Октябрь', 
+                'November': 'Ноябрь', 
+                'December': 'Декабрь'
             };
 
             const table = document.getElementById('data-table');
