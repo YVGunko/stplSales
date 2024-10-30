@@ -59,10 +59,12 @@
 <body>
     <div class="left-panel">
         <h1>Upload XLSX File</h1>
-        <form action="/" method="post" enctype="multipart/form-data" style="display: flex; flex-direction: column;">
+        <form action="/" method="post" enctype="multipart/form-data" style="display: flex; flex-direction: column; margin-right: 10px;">
             <input type="file" name="file" accept=".xlsx,.xls" required>
-            <button type="submit" style="margin-top: 10px;">Upload</button>
-            <p id="status" style="margin: 0;">{{ status }}</p>
+            <div style="display: flex; align-items: center; margin-top: 10px;">
+                <button type="submit" style="margin-right: 10px;">Upload</button>
+                <p id="status" style="margin: 0;">{{ status }}</p>
+            </div>
         </form>
 
         {% if uploaded_file %}
@@ -99,7 +101,11 @@
         <div id="modifiedContentContainer" class="table-container-right">
             <div id="modifiedContentTable"></div>
         </div>
-        <button id="deleteRowButton">Delete Selected Row</button>
+        <div style="display: flex; align-items: center; margin-top: 10px;">
+            <button id="deleteRowButton" style="margin-right: 10px;">Delete Selected Row</button>
+            <label id="tableTotal" for="tableTotal">Total: 0</label> <!-- Initialize total to 0 -->
+        </div>
+        <p id="last_changes" style="margin: 0;">{{ last_changes }}</p>
     </div>
         <script>
             // Initialize modifiedContentJson with an empty array
@@ -128,21 +134,25 @@
                     width: '100%',
                     height: 'auto',
                     stretchH: 'all',
-                    selectionMode: 'multiple',
+                    selectionMode: 'row',
+                    afterChange: updateTableTotal,
                     licenseKey: 'non-commercial-and-evaluation',
                 });
 
                 // Add hook to delete the selected row
-                modifiedContentTable.addHook('afterSelectionEnd', function (row, col) {
+                modifiedContentTable.addHook('afterSelectionEnd', function (row) {
                     // Store the selected row index
                     this.selectedRowIndex = row;
                     console.log(this.selectedRowIndex);
+                    this.selectedRowProduct = modifiedContentTable.getDataAtCell(row, 0);
+                    console.log(this.selectedRowProduct);
                 });
                 document.getElementById('deleteRowButton').addEventListener('click', function () {
                     if (modifiedContentTable.selectedRowIndex !== undefined) {
-                        const confirmed = confirm("Are you sure you want to delete this row?");
+                        const confirmed = confirm("Are you sure you want to delete row "+modifiedContentTable.selectedRowProduct+" ?");
                         if (confirmed) {
                             modifiedContentTable.alter('remove_row', modifiedContentTable.selectedRowIndex);
+                            updateTableTotal();
                         }
                     } else {
                         alert("Please select a row to delete.");
@@ -152,6 +162,24 @@
                 console.error("Failed to parse JSON:", e);
             }
 
+            // Function to update the table total label
+            function updateTableTotal(changes, source) {
+                if (source === 'loadData') return; // Skip if data is loaded
+                console.info ("updateTableTotal source:", source);
+                console.info ("updateTableTotal changes:", changes);
+                let total = 0;
+                const data = modifiedContentTable.getData();
+
+                // Calculate total for the numeric column (column2)
+                for (let i = 0; i < data.length - 1; i++) { // Exclude the last row (total row)
+                    total += data[i][1] || 0; // Add numeric values
+                }
+
+                // Update the label and paragraph with the new total
+                document.getElementById('tableTotal').innerText = `Total: ${total}`;
+                if (source === 'edit')
+                    document.getElementById('last_changes').innerText = `Last changes: ${changes}`;
+            }
             // Function to toggle the save button based on month and year input
             function toggleSaveButton() {
                 const monthInput = document.getElementById('monthInput').value;
