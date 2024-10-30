@@ -6,53 +6,42 @@
     <title>Excel Analyzer</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/handsontable/dist/handsontable.full.min.css">
     <script src="https://cdn.jsdelivr.net/npm/handsontable/dist/handsontable.full.min.js"></script>
-
     <style>
         body {
             display: flex;
             justify-content: space-between;
             margin: 20px;
-            flex-wrap: wrap; /* Allow wrapping on smaller screens */
+            flex-wrap: wrap;
         }
         .left-panel, .right-panel {
-            width: 48%; /* Adjust widths as needed */
-            height: 90vh; /* Use viewport height for responsiveness */
+            width: 48%;
+            height: 90vh;
         }
         table.data {
-            width: 100%; /* Full width */
-            border-collapse: collapse; /* Collapse borders */
-            table-layout: auto; /* Automatic column sizing */
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: auto;
         }
         table.data th, table.data td {
             border: 1px solid black;
-            padding: 8px; /* Cell padding */
-            text-align: left; /* Align text left */
+            padding: 8px;
+            text-align: left;
         }
         @media (max-width: 768px) {
             table.data th, table.data td {
-                padding: 6px; /* Smaller padding */
-                font-size: 12px; /* Smaller font size */
+                padding: 6px;
+                font-size: 12px;
             }
         }
-        .table-container-left {
-            width: 100%; /* Full width */
-            max-height: 75%; /* Use viewport height for responsiveness */
-            overflow-y: auto; /* Enable vertical scrolling */
-            overflow-x: auto; /* Enable horizontal scrolling */
+        .table-container-left, .table-container-right {
+            width: 100%;
+            max-height: 75%;
+            overflow-y: auto;
+            overflow-x: auto;
             border: 1px solid #ccc;
             margin-top: 10px;
             margin-bottom: 10px;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1); /* Optional shadow */
-        }
-        .table-container-right {
-            width: 100%; /* Full width */
-            max-height: 85%; /* Use viewport height for responsiveness */
-            overflow-y: auto; /* Enable vertical scrolling */
-            overflow-x: auto; /* Enable horizontal scrolling */
-            border: 1px solid #ccc;
-            margin-top: 10px;
-            margin-bottom: 10px;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1); /* Optional shadow */
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
         }
     </style>
 </head>
@@ -69,20 +58,18 @@
 
         {% if uploaded_file %}
             <h2>Uploaded File Content</h2>
-
             <div class="table-container-left">
                 <div>{{ uploaded_file|safe }}</div>
             </div>
         {% endif %}
     </div>
+
     {% if modified_content_json %}
     <div class="right-panel">
-
         <h2>Modified Content</h2>
         <label for="monthInput">Select Month:</label>
         <select id="monthInput" onchange="toggleSaveButton()">
             <option value="">--Select Month--</option>
-            <!-- Populate month options -->
             {% for month in range(1, 13) %}
                 <option value="{{ month }}">{{ month }}</option>
             {% endfor %}
@@ -91,7 +78,6 @@
         <label for="yearInput">Select Year:</label>
         <select id="yearInput" onchange="toggleSaveButton()">
             <option value="">--Select Year--</option>
-            <!-- Populate year options, adjust as needed -->
             {% for year in range(current_year - 5, current_year + 1) %}
                 <option value="{{ year }}">{{ year }}</option>
             {% endfor %}
@@ -101,167 +87,158 @@
         <div id="modifiedContentContainer" class="table-container-right">
             <div id="modifiedContentTable"></div>
         </div>
+        
         <div style="display: flex; align-items: center; margin-top: 10px;">
             <button id="deleteRowButton" style="margin-right: 10px;">Delete Selected Row</button>
-            <label id="tableTotal" for="tableTotal">Total: 0</label> <!-- Initialize total to 0 -->
+            <label id="tableTotal" for="tableTotal">Total: 0</label>
         </div>
         <p id="last_changes" style="margin: 0;">{{ last_changes }}</p>
     </div>
-        <script>
-            // Initialize modifiedContentJson with an empty array
-            let modifiedContentJson = [];
-            let modifiedContentTable;
-            try {
-                const jsonString = '{{ modified_content_json|safe }}';
-                if (jsonString) {
-                    modifiedContentJson = JSON.parse(jsonString);
-                    console.info("modifiedContentJson:", modifiedContentJson);
-                }
 
-                // Initialize Handsontable
-                const colHeaders = Object.keys(modifiedContentJson[0]);
-                console.info("colHeaders:", colHeaders);
-                modifiedContentTable = new Handsontable(document.getElementById('modifiedContentTable'), {
-                    data: modifiedContentJson,
-                    colHeaders: colHeaders,
-                    columns: [
-                        { data: colHeaders[0], type: 'text' },
-                        { data: colHeaders[1], type: 'numeric' },
-                        { data: colHeaders[2], type: 'dropdown', source: [ '0', '00-000002', '00-000025', '00-000047', ], },
-                    ],
-                    columnSorting: true,
-                    rowHeaders: true,
-                    width: '100%',
-                    height: 'auto',
-                    stretchH: 'all',
-                    selectionMode: 'row',
-                    afterChange: updateTableTotal,
-                    licenseKey: 'non-commercial-and-evaluation',
-                });
+    <script>
+        let modifiedContentJson = [];
+        let modifiedContentTable;
 
-                // Add hook to delete the selected row
-                modifiedContentTable.addHook('afterSelectionEnd', function (row) {
-                    // Store the selected row index
-                    this.selectedRowIndex = row;
-                    console.log(this.selectedRowIndex);
-                    this.selectedRowProduct = modifiedContentTable.getDataAtCell(row, 0);
-                    console.log(this.selectedRowProduct);
-                });
-                document.getElementById('deleteRowButton').addEventListener('click', function () {
-                    if (modifiedContentTable.selectedRowIndex !== undefined) {
-                        const confirmed = confirm("Are you sure you want to delete row "+modifiedContentTable.selectedRowProduct+" ?");
-                        if (confirmed) {
-                            modifiedContentTable.alter('remove_row', modifiedContentTable.selectedRowIndex);
-                            updateTableTotal();
-                        }
-                    } else {
-                        alert("Please select a row to delete.");
-                    }
-                });
-            } catch (e) {
-                console.error("Failed to parse JSON:", e);
+        // Load data into Handsontable and calculate total
+        try {
+            const jsonString = '{{ modified_content_json|safe }}';
+            if (jsonString) {
+                modifiedContentJson = JSON.parse(jsonString);
+                console.info("modifiedContentJson:", modifiedContentJson);
             }
 
-            // Function to update the table total label
-            function updateTableTotal(changes, source) {
-                if (source === 'loadData') return; // Skip if data is loaded
-                console.info ("updateTableTotal source:", source);
-                console.info ("updateTableTotal changes:", changes);
-                let total = 0;
-                const data = modifiedContentTable.getData();
-
-                // Calculate total for the numeric column (column2)
-                for (let i = 0; i < data.length - 1; i++) { // Exclude the last row (total row)
-                    total += data[i][1] || 0; // Add numeric values
-                }
-
-                // Update the label and paragraph with the new total
-                document.getElementById('tableTotal').innerText = `Total: ${total}`;
-                if (source === 'edit')
-                    document.getElementById('last_changes').innerText = `Last changes: ${changes}`;
-            }
-            // Function to toggle the save button based on month and year input
-            function toggleSaveButton() {
-                const monthInput = document.getElementById('monthInput').value;
-                const yearInput = document.getElementById('yearInput').value;
-                const saveButton = document.getElementById('saveButton');
-
-                saveButton.disabled = !(monthInput && yearInput && modifiedContentTable); // Enable if both inputs have values
-            }
-
-            // Pre-fill the month and year inputs on page load
-            document.addEventListener('DOMContentLoaded', () => {
-                const now = new Date();
-                const monthInput = document.getElementById('monthInput');
-                const yearInput = document.getElementById('yearInput');
-
-                // Set the current month (JavaScript months are 0-indexed)
-                // monthInput.value = now.getMonth() + 1; // +1 to convert from 0-indexed to 1-indexed
-                // Set the current year
-                yearInput.value = now.getFullYear();
-                
-                // Enable the save button if both month and year are selected
-                toggleSaveButton();
+            // Initialize Handsontable
+            const colHeaders = Object.keys(modifiedContentJson[0]);
+            console.info("colHeaders:", colHeaders);
+            modifiedContentTable = new Handsontable(document.getElementById('modifiedContentTable'), {
+                data: modifiedContentJson,
+                colHeaders: colHeaders,
+                columns: [
+                    { data: colHeaders[0], type: 'text' },
+                    { data: colHeaders[1], type: 'numeric' },
+                    { data: colHeaders[2], type: 'dropdown', source: ['0', '00-000002', '00-000025', '00-000047'] },
+                ],
+                columnSorting: true,
+                rowHeaders: true,
+                width: '100%',
+                height: 'auto',
+                stretchH: 'all',
+                selectionMode: 'row',
+                afterChange: updateTableTotal,
+                licenseKey: 'non-commercial-and-evaluation',
             });
 
-            async function saveData() {
-                const month = document.getElementById('monthInput').value; // Get the selected month
-                const year = document.getElementById('yearInput').value; // Get the selected year
-                
-                // Determine the last day of the month
-                const lastDay = new Date(year, month, 0).getDate();
-                const selectedDate = `${year}-${month.padStart(2, '0')}-${lastDay}`; // Format: YYYY-MM-DD
+            // Update total immediately after loading data
+            updateTableTotal();
 
-                const dataArray = modifiedContentTable.getData();
-                modifiedContentJson = dataArray.map(row => ({
-                    Product: row[0],
-                    Total: row[1],
-                    Division: row[2],
-                    // Add more columns as needed
-                }));
-                console.info("modifiedContentJson:", modifiedContentJson);
+            // Hook for row deletion
+            modifiedContentTable.addHook('afterSelectionEnd', function (row) {
+                this.selectedRowIndex = row;
+                this.selectedRowProduct = modifiedContentTable.getDataAtCell(row, 0);
+            });
 
-                const response = await fetch('/api/save', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ date: selectedDate, data: modifiedContentJson }),
-                });
-
-                const result = await response.json();
-
-                // Handle confirmation if records exist
-                if (result.status === 'warning' && result.confirm_deletion) {
-                    const userConfirmed = confirm(result.message);
-                    if (userConfirmed) {
-                        // User confirmed deletion, call the delete and save endpoint
-                        await deleteAndSaveData(selectedDate, modifiedContentJson);
+            document.getElementById('deleteRowButton').addEventListener('click', function () {
+                if (modifiedContentTable.selectedRowIndex !== undefined) {
+                    const confirmed = confirm("Are you sure you want to delete row " + modifiedContentTable.selectedRowProduct + "?");
+                    if (confirmed) {
+                        modifiedContentTable.alter('remove_row', modifiedContentTable.selectedRowIndex);
+                        updateTableTotal();
                     }
                 } else {
-                    alert(result.message);
-                    if (result.status === 'success') {
-                        window.location.href = '/show_data';  // Redirect to show_data page
-                    }
+                    alert("Please select a row to delete.");
                 }
+            });
+        } catch (e) {
+            console.error("Failed to parse JSON:", e);
+        }
+
+        // Function to update the table total label
+        function updateTableTotal(changes, source) {
+            if (source === 'loadData') return; // Skip if data is loaded
+            console.info("updateTableTotal source:", source);
+            let total = 0;
+            const data = modifiedContentTable.getData();
+
+            // Calculate total for the numeric column (column2)
+            for (let i = 0; i < data.length - 1; i++) { // Exclude the last row (total row)
+                total += data[i][1] || 0; // Add numeric values
             }
 
-            async function deleteAndSaveData(selectedDate, jsonData) {
-                const response = await fetch('/api/delete_and_save', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ date: selectedDate, data: jsonData }),
-                });
+            // Update the label and paragraph with the new total
+            document.getElementById('tableTotal').innerText = `Total: ${total}`;
+            if (source === 'edit')
+                    document.getElementById('last_changes').innerText = `Last changes: ${changes[1]}`;
+        }
 
-                const result = await response.json();
+        // Function to toggle the save button based on month and year input
+        function toggleSaveButton() {
+            const monthInput = document.getElementById('monthInput').value;
+            const yearInput = document.getElementById('yearInput').value;
+            const saveButton = document.getElementById('saveButton');
+
+            saveButton.disabled = !(monthInput && yearInput && modifiedContentTable); // Enable if both inputs have values
+        }
+
+        // Pre-fill the month and year inputs on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            const now = new Date();
+            const yearInput = document.getElementById('yearInput');
+            yearInput.value = now.getFullYear();
+            toggleSaveButton();
+        });
+
+        async function saveData() {
+            const month = document.getElementById('monthInput').value;
+            const year = document.getElementById('yearInput').value;
+
+            // Determine the last day of the month
+            const lastDay = new Date(year, month, 0).getDate();
+            const selectedDate = `${year}-${month.padStart(2, '0')}-${lastDay}`; // Format: YYYY-MM-DD
+
+            const dataArray = modifiedContentTable.getData();
+            modifiedContentJson = dataArray.map(row => ({
+                Product: row[0],
+                Total: row[1],
+                Division: row[2],
+            }));
+            console.info("modifiedContentJson:", modifiedContentJson);
+
+            const response = await fetch('/api/save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ date: selectedDate, data: modifiedContentJson }),
+            });
+
+            const result = await response.json();
+
+            // Handle confirmation if records exist
+            if (result.status === 'warning' && result.confirm_deletion) {
+                const userConfirmed = confirm(result.message);
+                if (userConfirmed) {
+                    await deleteAndSaveData(selectedDate, modifiedContentJson);
+                }
+            } else {
                 alert(result.message);
                 if (result.status === 'success') {
                     window.location.href = '/show_data';  // Redirect to show_data page
                 }
             }
-        </script>
+        }
+
+        async function deleteAndSaveData(selectedDate, jsonData) {
+            const response = await fetch('/api/delete_and_save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ date: selectedDate, data: jsonData }),
+            });
+
+            const result = await response.json();
+            alert(result.message);
+            if (result.status === 'success') {
+                window.location.href = '/show_data';  // Redirect to show_data page
+            }
+        }
+    </script>
     {% endif %}
 </body>
 </html>
