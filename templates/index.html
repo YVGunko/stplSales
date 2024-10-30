@@ -31,7 +31,7 @@
         @media (max-width: 768px) {
             table.data th, table.data td {
                 padding: 6px; /* Smaller padding */
-                font-size: 14px; /* Smaller font size */
+                font-size: 12px; /* Smaller font size */
             }
         }
         .table-container-left {
@@ -99,6 +99,7 @@
         <div id="modifiedContentContainer" class="table-container-right">
             <div id="modifiedContentTable"></div>
         </div>
+        <button id="deleteRowButton">Delete Selected Row</button>
     </div>
         <script>
             // Initialize modifiedContentJson with an empty array
@@ -120,12 +121,26 @@
                     columns: [
                         { data: colHeaders[0], type: 'text' },
                         { data: colHeaders[1], type: 'numeric' },
-                        { data: colHeaders[2], type: 'text' },
+                        { data: colHeaders[2], type: 'dropdown', source: [ '0', '00-000002', '00-000025', '00-000047', ], },
                     ],
+                    columnSorting: true,
                     rowHeaders: true,
                     width: '100%',
-                    height: '300',
+                    height: 'auto',
+                    stretchH: 'all',
+                    selectionMode: 'row',
                     licenseKey: 'non-commercial-and-evaluation',
+                });
+
+                // Function to delete the selected row
+                document.getElementById('deleteRowButton').addEventListener('click', function () {
+                    const selected = modifiedContentTable.getSelected(); // Get selected cell range
+                    if (selected) {
+                        const rowIndex = selected[0][0]; // Get the row index of the first selected cell
+                        modifiedContentTable.alter('remove_row', rowIndex); // Remove the row
+                    } else {
+                        alert("Please select a row to delete.");
+                    }
                 });
             } catch (e) {
                 console.error("Failed to parse JSON:", e);
