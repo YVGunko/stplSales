@@ -55,7 +55,7 @@ def index():
             message = 'Database connection failed.'
             return render_template('index.html', current_year=current_year, status=message)
 
-        uploaded_df = pd.read_excel(file, skiprows=4, nrows= 20)
+        uploaded_df = pd.read_excel(file, skiprows=4, nrows=10)
 
         # Call prepare_excel with the uploaded DataFrame
         modified_excel_df = pd.DataFrame(prepare_excel(uploaded_df) , columns=[first_column_name, second_column_name])
@@ -65,16 +65,20 @@ def index():
         # If you want to reset the index after reading
         modified_excel_df.reset_index(drop=True, inplace=True)
 
+
         # Call analyze_excel with the uploaded DataFrame
         modified_content = analyze_excel(modified_excel_df) 
 
         # Convert modified_content to DataFrame for rendering
         modified_df = pd.DataFrame(modified_content, columns=[first_column_name, second_column_name, third_column_name])
 
+        json_dumps=json.dumps(modified_df.to_dict(orient='records'))
+
         return render_template('index.html', current_year=current_year, 
                                status='File uploaded successfully!', 
                                uploaded_file=uploaded_df.to_html(classes='data', header="true", index=False),
-                               modified_content_json=json.dumps(modified_df.to_dict(orient='records')))  # Pass modified content as HTML
+                               modified_content=modified_df.to_html(classes='data', header="true", index=False),
+                               modified_content_json=json_dumps)  
 
     return render_template('index.html', status=message)
 

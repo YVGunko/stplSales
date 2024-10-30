@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Excel Analyzer</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/handsontable/dist/handsontable.full.min.css">
     <script src="https://cdn.jsdelivr.net/npm/handsontable/dist/handsontable.full.min.js"></script>
 
-    <title>Excel Analyzer</title>
     <style>
         body {
             display: flex;
@@ -46,7 +46,7 @@
         }
         .table-container-right {
             width: 100%; /* Full width */
-            max-height: 85%; /* Use viewport height for responsiveness */
+            max-height: 45%; /* Use viewport height for responsiveness */
             overflow-y: auto; /* Enable vertical scrolling */
             overflow-x: auto; /* Enable horizontal scrolling */
             border: 1px solid #ccc;
@@ -67,12 +67,13 @@
 
         {% if uploaded_file %}
             <h2>Uploaded File Content</h2>
+
             <div class="table-container-left">
                 <div>{{ uploaded_file|safe }}</div>
             </div>
         {% endif %}
     </div>
-    {% if modified_content_json %}
+    {% if modified_content %}
     <div class="right-panel">
 
         <h2>Modified Content</h2>
@@ -95,44 +96,56 @@
         </select>
 
         <button id="saveButton" onclick="saveData()" disabled>Save on Server</button>
-        <div id="modifiedContentContainer" class="table-container-right" style="display: none;">
+        <div class="table-container-right">
+            <div>{{ modified_content|safe }}</div>
+        </div>
+        <div id="modifiedContentContainer" class="table-container-right">
             <div id="modifiedContentTable"></div>
         </div>
     </div>
-    {% endif %}
         <script>
+            // Initialize modifiedContentJson with an empty array
             let modifiedContentJson = [];
             let modifiedContentTable;
+            try {
+                const jsonString = '{{ modified_content_json|safe }}';
+                if (jsonString) {
+                    modifiedContentJson = JSON.parse(jsonString);
+                    console.info("modifiedContentJson:", modifiedContentJson);
+                }
+
+                // Initialize Handsontable
+                const colHeaders = Object.keys(modifiedContentJson[0]);
+                console.info("colHeaders:", colHeaders);
+                modifiedContentTable = new Handsontable(document.getElementById('modifiedContentTable'), {
+                    data: modifiedContentJson,
+                    colHeaders: colHeaders,
+                    rowHeaders: true,
+                    width: '100%',
+                    height: '300',
+                    licenseKey: 'non-commercial-and-evaluation',
+                });
+            } catch (e) {
+                console.error("Failed to parse JSON:", e);
+            }
 
             // Function to toggle the save button based on month and year input
             function toggleSaveButton() {
                 const monthInput = document.getElementById('monthInput').value;
                 const yearInput = document.getElementById('yearInput').value;
                 const saveButton = document.getElementById('saveButton');
-                saveButton.disabled = !(monthInput && yearInput); // Enable if both inputs have values
+
+                saveButton.disabled = !(monthInput && yearInput && modifiedContentTable); // Enable if both inputs have values
             }
 
             // Pre-fill the month and year inputs on page load
             document.addEventListener('DOMContentLoaded', () => {
-                const modifiedContentJson = '{{ modified_content_json|safe }}';
-                const jsonData = modifiedContentJson ? JSON.parse(modifiedContentJson) : [];
-
-                // Initialize Handsontable
-                modifiedContentTable = new Handsontable(document.getElementById('modifiedContentTable'), {
-                    data: jsonData,
-                    colHeaders: true,
-                    rowHeaders: true,
-                    width: '100%',
-                    height: '300',
-                    licenseKey: 'non-commercial-and-evaluation',
-                });
-
                 const now = new Date();
                 const monthInput = document.getElementById('monthInput');
                 const yearInput = document.getElementById('yearInput');
 
                 // Set the current month (JavaScript months are 0-indexed)
-                monthInput.value = now.getMonth() + 1; // +1 to convert from 0-indexed to 1-indexed
+                // monthInput.value = now.getMonth() + 1; // +1 to convert from 0-indexed to 1-indexed
                 // Set the current year
                 yearInput.value = now.getFullYear();
                 
@@ -148,15 +161,21 @@
                 const lastDay = new Date(year, month, 0).getDate();
                 const selectedDate = `${year}-${month.padStart(2, '0')}-${lastDay}`; // Format: YYYY-MM-DD
 
-                const modifiedData = modifiedContentTable.getData(); // Get the edited data
-                const jsonData = JSON.stringify(modifiedData); // Convert to JSON
+                const dataArray = modifiedContentTable.getData();
+                modifiedContentJson = dataArray.map(row => ({
+                    Product: row[0],
+                    Total: row[1],
+                    Division: row[2],
+                    // Add more columns as needed
+                }));
+                console.info("modifiedContentJson:", modifiedContentJson);
 
                 const response = await fetch('/api/save', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ date: selectedDate, data: jsonData }),
+                    body: JSON.stringify({ date: selectedDate, data: modifiedContentJson }),
                 });
 
                 const result = await response.json();
@@ -166,7 +185,7 @@
                     const userConfirmed = confirm(result.message);
                     if (userConfirmed) {
                         // User confirmed deletion, call the delete and save endpoint
-                        await deleteAndSaveData(selectedDate, jsonData);
+                        await deleteAndSaveData(selectedDate, modifiedContentJson);
                     }
                 } else {
                     alert(result.message);
@@ -176,13 +195,13 @@
                 }
             }
 
-            async function deleteAndSaveData(selectedDate, dataToSave) {
+            async function deleteAndSaveData(selectedDate, jsonData) {
                 const response = await fetch('/api/delete_and_save', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ date: selectedDate, data: dataToSave }),
+                    body: JSON.stringify({ date: selectedDate, data: jsonData }),
                 });
 
                 const result = await response.json();
@@ -192,6 +211,6 @@
                 }
             }
         </script>
-
+    {% endif %}
 </body>
 </html>
