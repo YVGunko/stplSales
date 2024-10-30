@@ -77,7 +77,6 @@ def index():
         return render_template('index.html', current_year=current_year, 
                                status='File uploaded successfully!', 
                                uploaded_file=uploaded_df.to_html(classes='data', header="true", index=False),
-                               modified_content=modified_df.to_html(classes='data', header="true", index=False),
                                modified_content_json=json_dumps)  
 
     return render_template('index.html', status=message)

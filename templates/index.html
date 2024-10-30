@@ -46,7 +46,7 @@
         }
         .table-container-right {
             width: 100%; /* Full width */
-            max-height: 45%; /* Use viewport height for responsiveness */
+            max-height: 85%; /* Use viewport height for responsiveness */
             overflow-y: auto; /* Enable vertical scrolling */
             overflow-x: auto; /* Enable horizontal scrolling */
             border: 1px solid #ccc;
@@ -73,7 +73,7 @@
             </div>
         {% endif %}
     </div>
-    {% if modified_content %}
+    {% if modified_content_json %}
     <div class="right-panel">
 
         <h2>Modified Content</h2>
@@ -96,9 +96,6 @@
         </select>
 
         <button id="saveButton" onclick="saveData()" disabled>Save on Server</button>
-        <div class="table-container-right">
-            <div>{{ modified_content|safe }}</div>
-        </div>
         <div id="modifiedContentContainer" class="table-container-right">
             <div id="modifiedContentTable"></div>
         </div>
@@ -120,6 +117,11 @@
                 modifiedContentTable = new Handsontable(document.getElementById('modifiedContentTable'), {
                     data: modifiedContentJson,
                     colHeaders: colHeaders,
+                    columns: [
+                        { data: colHeaders[0], type: 'text' },
+                        { data: colHeaders[1], type: 'numeric' },
+                        { data: colHeaders[2], type: 'text' },
+                    ],
                     rowHeaders: true,
                     width: '100%',
                     height: '300',
