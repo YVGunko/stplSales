@@ -117,6 +117,7 @@
             const jsonString = '{{ modified_content_json|safe }}';
             if (jsonString) {
                 modifiedContentJson = JSON.parse(jsonString);
+                originalData = modifiedContentJson;
                 console.info("modifiedContentJson:", modifiedContentJson);
             }
 
@@ -146,11 +147,14 @@
                 height: 'auto',
                 stretchH: 'all',
                 selectionMode: 'row',
-                beforeChange: function (changes) {
+                beforeChange: function (changes, source) {
                     if (changes) {
                         // Save original data before changes
-                        originalData = modifiedContentTable.getData();
-                        console.log("Handsontable originalData: ", originalData);
+                        console.log("Handsontable beforeChange changes: ", changes);
+                    }
+                    if (source) {
+                        // Save original data before changes
+                        console.log("Handsontable beforeChange source: ", source);
                     }
                 },
                 afterChange: function (changes, source) {
@@ -169,7 +173,9 @@
                         
                         console.log("Updated modifiedContentJson after change:", modifiedContentJson);
                         console.log("Updated filteredContentJson after change:", filteredContentJson);
-                        updateTableTotal();
+                        if (changes) console.log("Handsontable afterChange changes: ", changes);
+                        if (source) console.log("Handsontable afterChange source: ", source);
+                        updateTableTotal(changes, source);
                     }
                 },
                 licenseKey: 'non-commercial-and-evaluation',
@@ -192,8 +198,14 @@
                     const confirmed = confirm("Are you sure you want to delete row " + modifiedContentTable.getDataAtCell(selectedRowIndex, 0) + "?");
                     
                     if (confirmed) {
-                        const rowToDelete = modifiedContentTable.getDataAtCell(selectedRowIndex, 0);
-                        console.info("deleteRowButton productToDelete:", rowToDelete);
+                        const rowToDeleteArray = modifiedContentTable.getDataAtRow(modifiedContentTable.selectedRowIndex)
+                        // Construct the rowToDelete object
+                        const rowToDelete = {
+                            Product: rowToDeleteArray[0], // Assuming the 1 column is 'Product'
+                            Total: rowToDeleteArray[1],   // Assuming the 2 column is 'Total'
+                            Division: rowToDeleteArray[2]  // Assuming the 3 column is 'Division'
+                        };
+                        console.info("deleteRowButton rowToDelete:", rowToDelete);
                         // Check if the table is filtered
                         if (filteredContentJson.length > 0) {
                             console.info("deleteRowButton filteredContentJson before delete:", filteredContentJson);
@@ -207,6 +219,9 @@
 
                             // Remove from Handsontable
                             modifiedContentTable.alter('remove_row', selectedRowIndex);
+                            // Save original data before changes
+                            originalData = modifiedContentTable.getData();
+                            console.log("Handsontable originalData: ", originalData);
                         }
 
                         updateTableTotal();
@@ -229,6 +244,7 @@
 
                     // Update Handsontable with filtered data
                     modifiedContentTable.loadData(filteredContentJson);
+                    updateTableTotal();
                 } else {
                     alert("Please select a row to filter by Product.");
                 }
