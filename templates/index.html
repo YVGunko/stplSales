@@ -61,6 +61,11 @@
             <div class="table-container-left">
                 <div>{{ uploaded_file|safe }}</div>
             </div>
+        {% else %}
+            <h2>Please, choose a file to load, click Upload button and wait a bit ...</h2>
+        {% endif %}
+        {% if file_total %}
+            <h3 id="file_total" style="margin: 0;">Uploaded File Total: {{ file_total }}</h3>
         {% endif %}
     </div>
 
@@ -90,9 +95,15 @@
         
         <div style="display: flex; align-items: center; margin-top: 10px;">
             <button id="deleteRowButton" style="margin-right: 10px;">Delete Selected Row</button>
-            <label id="tableTotal" for="tableTotal">Total: 0</label>
+            <button id="filterSimilarRowsButton" style="margin-right: 10px;">Filter Similar Rows</button>
+            <button id="clearFilterButton">Clear Filter</button>
         </div>
-        <p id="last_changes" style="margin: 0;">{{ last_changes }}</p>
+        <div>
+            <p id="last_changes" style="margin: 0;">{{ last_changes }}</p>
+        </div>
+        <div>
+            <h3 id="tableTotal" style="margin: 0;">Table Total: 0</h3>
+        </div>
     </div>
 
     <script>
@@ -131,7 +142,7 @@
             // Update total immediately after loading data
             updateTableTotal();
 
-            // Hook for row deletion
+            // Hook for row index and Product column text
             modifiedContentTable.addHook('afterSelectionEnd', function (row) {
                 this.selectedRowIndex = row;
                 this.selectedRowProduct = modifiedContentTable.getDataAtCell(row, 0);
@@ -148,10 +159,50 @@
                     alert("Please select a row to delete.");
                 }
             });
+            document.getElementById('filterSimilarRowsButton').addEventListener('click', function () {
+                // Get the selected row index
+                const selectedRowIndex = modifiedContentTable.selectedRowIndex; // Assuming you store this in the selection hook
+
+                if (selectedRowIndex !== undefined) {
+                    const searchText = modifiedContentTable.selectedRowProduct; 
+                    console.log("searchText:", searchText);
+                    // Get all data from the table
+                    const allData = modifiedContentTable.getData();
+
+                    // Find rows containing similar text
+                    const similarRows = allData.filter((currentRow, index) => {
+                        // Skip the selected row itself (if you want to exclude it)
+                        return index !== selectedRowIndex && currentRow[0] && currentRow[0].includes(searchText);
+                    });
+
+                    console.log("Similar rows:", similarRows);
+
+                    // Update the Handsontable data to show only similar rows
+                    modifiedContentTable.loadData(similarRows.length > 0 ? similarRows : allData); // Show all data if no matches
+                } else {
+                    alert("Please select a row to filter similar rows.");
+                }
+            });
+            // Event listener for clearing the filter
+            document.getElementById('clearFilterButton').addEventListener('click', function () {
+                // Restore the original data
+                modifiedContentTable.loadData(originalData);
+            });
         } catch (e) {
             console.error("Failed to parse JSON:", e);
         }
 
+        // Function to highlight similar rows (you can customize this)
+        function highlightSimilarRows(similarRows) {
+            // Example: You could loop through the table and apply a class to similar rows
+            const allRows = modifiedContentTable.getData();
+            allRows.forEach((rowData, index) => {
+                if (similarRows.includes(rowData)) {
+                    modifiedContentTable.setRowHeight(index, 30); // Set a different height for visibility, for example
+                    // Add a custom CSS class if you want to change the background color, etc.
+                }
+            });
+        }
         // Function to update the table total label
         function updateTableTotal(changes, source) {
             if (source === 'loadData') return; // Skip if data is loaded
@@ -160,12 +211,12 @@
             const data = modifiedContentTable.getData();
 
             // Calculate total for the numeric column (column2)
-            for (let i = 0; i < data.length - 1; i++) { // Exclude the last row (total row)
+            for (let i = 0; i < data.length ; i++) { 
                 total += data[i][1] || 0; // Add numeric values
             }
 
             // Update the label and paragraph with the new total
-            document.getElementById('tableTotal').innerText = `Total: ${total}`;
+            document.getElementById('tableTotal').innerText = `Table Total: ${total}`;
             if (source === 'edit')
                     document.getElementById('last_changes').innerText = `Last changes: ${changes[1]}`;
         }

@@ -26,6 +26,8 @@ uploaded_df = None
 patterns_divisions_dict = {}
 # Global const
 start_row = 0
+skip_rows = 3
+file_total = 0
 first_column_name = 'Product'
 second_column_name = 'Total'
 third_column_name = 'Division'
@@ -40,12 +42,23 @@ def check_db_connection():
 
 def read_excel(file):
     # Read the Excel file into a DataFrame
-    df = pd.read_excel(file)
+    df = pd.read_excel(file, skiprows=skip_rows)
     return df
+
+def read_total():
+    last_row = uploaded_df.tail(1)
+
+    # Access the value from the fourth column
+    value_from_fourth_column = last_row.iloc[0, 3]  # Using index (0-based)
+
+    print("Value from the fourth column of the last row:")
+    print(value_from_fourth_column)
+    return value_from_fourth_column
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
     global uploaded_df
+    global file_total
     message = ""
     current_year = datetime.now().year  # Get the current year
     if request.method == 'POST':
@@ -55,8 +68,8 @@ def index():
             message = 'Database connection failed.'
             return render_template('index.html', current_year=current_year, status=message)
 
-        uploaded_df = pd.read_excel(file, skiprows=4, nrows=10)
-
+        uploaded_df = read_excel(file)
+        file_total = read_total()
         # Call prepare_excel with the uploaded DataFrame
         modified_excel_df = pd.DataFrame(prepare_excel(uploaded_df) , columns=[first_column_name, second_column_name])
 
@@ -64,7 +77,6 @@ def index():
 
         # If you want to reset the index after reading
         modified_excel_df.reset_index(drop=True, inplace=True)
-
 
         # Call analyze_excel with the uploaded DataFrame
         modified_content = analyze_excel(modified_excel_df) 
@@ -74,7 +86,7 @@ def index():
 
         json_dumps=json.dumps(modified_df.to_dict(orient='records'))
 
-        return render_template('index.html', current_year=current_year, 
+        return render_template('index.html', current_year=current_year, file_total = file_total,
                                status='File uploaded successfully!', 
                                uploaded_file=uploaded_df.to_html(classes='data', header="true", index=False),
                                modified_content_json=json_dumps)  
