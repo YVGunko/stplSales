@@ -107,7 +107,9 @@
     </div>
 
     <script>
-        let modifiedContentJson = [];
+        let modifiedContentJson = []; // Original Json
+        let filteredContentJson = []; // For filtered Json
+        let originalData = []; // For data before changes
         let modifiedContentTable;
 
         // Load data into Handsontable and calculate total
@@ -120,7 +122,16 @@
 
             // Initialize Handsontable
             const colHeaders = Object.keys(modifiedContentJson[0]);
-            console.info("colHeaders:", colHeaders);
+            // Function to convert Handsontable data to JSON
+            function convertToJson(data) {
+                return data.map(row => {
+                    return colHeaders.reduce((acc, header, index) => {
+                        acc[header] = row[index];
+                        return acc;
+                    }, {});
+                });
+            }
+            // Initialize Handsontable
             modifiedContentTable = new Handsontable(document.getElementById('modifiedContentTable'), {
                 data: modifiedContentJson,
                 colHeaders: colHeaders,
@@ -135,7 +146,32 @@
                 height: 'auto',
                 stretchH: 'all',
                 selectionMode: 'row',
-                afterChange: updateTableTotal,
+                beforeChange: function (changes) {
+                    if (changes) {
+                        // Save original data before changes
+                        originalData = modifiedContentTable.getData();
+                        console.log("Handsontable originalData: ", originalData);
+                    }
+                },
+                afterChange: function (changes, source) {
+                    if (source !== 'loadData' && changes) {
+                        // Update modifiedContentJson
+                        const currentData = modifiedContentTable.getData();
+                        modifiedContentJson = convertToJson(currentData);
+                        
+                        // If filteredContentJson is not empty, update it as well
+                        if (filteredContentJson.length > 0) {
+                            filteredContentJson = filteredContentJson.map((row, index) => {
+                                const originalRow = originalData.find(origRow => origRow[0] === row[0]); // Match by Product
+                                return originalRow ? currentData[index] : row; // Update only if it exists in original
+                            });
+                        }
+                        
+                        console.log("Updated modifiedContentJson after change:", modifiedContentJson);
+                        console.log("Updated filteredContentJson after change:", filteredContentJson);
+                        updateTableTotal();
+                    }
+                },
                 licenseKey: 'non-commercial-and-evaluation',
             });
 
@@ -145,64 +181,78 @@
             // Hook for row index and Product column text
             modifiedContentTable.addHook('afterSelectionEnd', function (row) {
                 this.selectedRowIndex = row;
-                this.selectedRowProduct = modifiedContentTable.getDataAtCell(row, 0);
+                this.selectedRow = modifiedContentTable.getDataAtCell(row);
             });
 
+            // Delete row button logic
             document.getElementById('deleteRowButton').addEventListener('click', function () {
-                if (modifiedContentTable.selectedRowIndex !== undefined) {
-                    const confirmed = confirm("Are you sure you want to delete row " + modifiedContentTable.selectedRowProduct + "?");
+                const selectedRowIndex = modifiedContentTable.selectedRowIndex;
+                console.info("deleteRowButton selectedRowIndex:", selectedRowIndex);
+                if (selectedRowIndex !== undefined) {
+                    const confirmed = confirm("Are you sure you want to delete row " + modifiedContentTable.getDataAtCell(selectedRowIndex, 0) + "?");
+                    
                     if (confirmed) {
-                        modifiedContentTable.alter('remove_row', modifiedContentTable.selectedRowIndex);
+                        const rowToDelete = modifiedContentTable.getDataAtCell(selectedRowIndex, 0);
+                        console.info("deleteRowButton productToDelete:", rowToDelete);
+                        // Check if the table is filtered
+                        if (filteredContentJson.length > 0) {
+                            console.info("deleteRowButton filteredContentJson before delete:", filteredContentJson);
+                            filteredContentJson = filteredContentJson.filter(row => !Object.keys(rowToDelete).every(key => row[key] === rowToDelete[key]));
+                            console.info("deleteRowButton filteredContentJson after delete:", filteredContentJson);
+                            // Reload filtered data back to the table
+                            modifiedContentTable.loadData(filteredContentJson);
+                        } else {
+                            // If not filtered, remove from modifiedContentJson
+                            modifiedContentJson = modifiedContentJson.filter(row => !Object.keys(rowToDelete).every(key => row[key] === rowToDelete[key]));
+
+                            // Remove from Handsontable
+                            modifiedContentTable.alter('remove_row', selectedRowIndex);
+                        }
+
                         updateTableTotal();
                     }
                 } else {
                     alert("Please select a row to delete.");
                 }
             });
+
+
+            // Filter similar rows
             document.getElementById('filterSimilarRowsButton').addEventListener('click', function () {
-                // Get the selected row index
-                const selectedRowIndex = modifiedContentTable.selectedRowIndex; // Assuming you store this in the selection hook
+                if (modifiedContentTable.selectedRowIndex !== undefined) {
+                    const selectedRowProduct = modifiedContentTable.getDataAtCell(modifiedContentTable.selectedRowIndex, 0);
+                    
+                    // Find rows containing similar Product text
+                    filteredContentJson = modifiedContentJson.filter((row) => 
+                        row.Product && row.Product.includes(selectedRowProduct)
+                    );
 
-                if (selectedRowIndex !== undefined) {
-                    const searchText = modifiedContentTable.selectedRowProduct; 
-                    console.log("searchText:", searchText);
-                    // Get all data from the table
-                    const allData = modifiedContentTable.getData();
-
-                    // Find rows containing similar text
-                    const similarRows = allData.filter((currentRow, index) => {
-                        // Skip the selected row itself (if you want to exclude it)
-                        return index !== selectedRowIndex && currentRow[0] && currentRow[0].includes(searchText);
-                    });
-
-                    console.log("Similar rows:", similarRows);
-
-                    // Update the Handsontable data to show only similar rows
-                    modifiedContentTable.loadData(similarRows.length > 0 ? similarRows : allData); // Show all data if no matches
+                    // Update Handsontable with filtered data
+                    modifiedContentTable.loadData(filteredContentJson);
                 } else {
-                    alert("Please select a row to filter similar rows.");
+                    alert("Please select a row to filter by Product.");
                 }
             });
-            // Event listener for clearing the filter
+            // Clear filter button
             document.getElementById('clearFilterButton').addEventListener('click', function () {
-                // Restore the original data
-                modifiedContentTable.loadData(originalData);
+                // Update original data with changes made to filtered rows
+                const currentData = modifiedContentTable.getData();
+                filteredContentJson.forEach((row, index) => {
+                    modifiedContentJson.forEach((originalRow, originalIndex) => {
+                        if (row.Product === originalRow.Product) {
+                            modifiedContentJson[originalIndex] = currentData[index]; // Update original data
+                        }
+                    });
+                });
+
+                // Reset to original data
+                modifiedContentTable.loadData(modifiedContentJson);
+                filteredContentJson = []; // Clear filtered data
             });
         } catch (e) {
             console.error("Failed to parse JSON:", e);
         }
 
-        // Function to highlight similar rows (you can customize this)
-        function highlightSimilarRows(similarRows) {
-            // Example: You could loop through the table and apply a class to similar rows
-            const allRows = modifiedContentTable.getData();
-            allRows.forEach((rowData, index) => {
-                if (similarRows.includes(rowData)) {
-                    modifiedContentTable.setRowHeight(index, 30); // Set a different height for visibility, for example
-                    // Add a custom CSS class if you want to change the background color, etc.
-                }
-            });
-        }
         // Function to update the table total label
         function updateTableTotal(changes, source) {
             if (source === 'loadData') return; // Skip if data is loaded
@@ -246,12 +296,9 @@
             const lastDay = new Date(year, month, 0).getDate();
             const selectedDate = `${year}-${month.padStart(2, '0')}-${lastDay}`; // Format: YYYY-MM-DD
 
-            const dataArray = modifiedContentTable.getData();
-            modifiedContentJson = dataArray.map(row => ({
-                Product: row[0],
-                Total: row[1],
-                Division: row[2],
-            }));
+            // Update modifiedContentJson with the current table data converted to JSON
+            const currentData = modifiedContentTable.getData();
+            modifiedContentJson = convertToJson(currentData);
             console.info("modifiedContentJson:", modifiedContentJson);
 
             const response = await fetch('/api/save', {
