@@ -72,6 +72,28 @@
     {% if modified_content_json %}
     <div class="right-panel">
         <h2>Modified Content</h2>
+
+        <div id="modifiedContentControl">
+            <div class="controlsQuickFilter" style="display: flex; align-items: center; margin-top: 10px;">
+                <label for="columns" class="selectColumn">Select a column:
+                  <select name="columns" id="columns">
+                    <option value="0">Product</option>
+                    <option value="1">Division</option>
+                  </select>
+                </label>
+                <input id="filterField" type="text" placeholder="Filter" />
+            </div>
+        </div>
+        <div id="modifiedContentContainer" class="table-container-right">
+            <div id="modifiedContentTable"></div>
+        </div>
+    
+        <div>
+            <p id="last_changes" style="margin: 0;">{{ last_changes }}</p>
+        </div>
+        <div>
+            <h3 id="tableTotal" style="margin: 0;">Table Total: 0</h3>
+        </div>
         <label for="monthInput">Select Month:</label>
         <select id="monthInput" onchange="toggleSaveButton()">
             <option value="">--Select Month--</option>
@@ -89,27 +111,10 @@
         </select>
 
         <button id="saveButton" onclick="saveData()" disabled>Save on Server</button>
-        <div id="modifiedContentContainer" class="table-container-right">
-            <div id="modifiedContentTable"></div>
-        </div>
-        
-        <div style="display: flex; align-items: center; margin-top: 10px;">
-            <button id="deleteRowButton" style="margin-right: 10px;">Delete Selected Row</button>
-            <button id="filterSimilarRowsButton" style="margin-right: 10px;">Filter Similar Rows</button>
-            <button id="clearFilterButton">Clear Filter</button>
-        </div>
-        <div>
-            <p id="last_changes" style="margin: 0;">{{ last_changes }}</p>
-        </div>
-        <div>
-            <h3 id="tableTotal" style="margin: 0;">Table Total: 0</h3>
-        </div>
     </div>
 
     <script>
-        let modifiedContentJson = []; // Original Json
-        let filteredContentJson = []; // For filtered Json
-        let originalData = []; // For data before changes
+        let modifiedContentJson = []; 
         let modifiedContentTable;
 
         // Load data into Handsontable and calculate total
@@ -117,7 +122,6 @@
             const jsonString = '{{ modified_content_json|safe }}';
             if (jsonString) {
                 modifiedContentJson = JSON.parse(jsonString);
-                originalData = modifiedContentJson;
                 console.info("modifiedContentJson:", modifiedContentJson);
             }
 
@@ -132,8 +136,11 @@
                     }, {});
                 });
             }
+            const container = document.querySelector('#modifiedContentTable');
+            const filterField = document.querySelector('#filterField');
             // Initialize Handsontable
-            modifiedContentTable = new Handsontable(document.getElementById('modifiedContentTable'), {
+            modifiedContentTable = new Handsontable(container, {
+                className: 'modifiedContentTable',
                 data: modifiedContentJson,
                 colHeaders: colHeaders,
                 columns: [
@@ -147,124 +154,41 @@
                 height: 'auto',
                 stretchH: 'all',
                 selectionMode: 'row',
-                beforeChange: function (changes, source) {
-                    if (changes) {
-                        // Save original data before changes
-                        console.log("Handsontable beforeChange changes: ", changes);
-                    }
-                    if (source) {
-                        // Save original data before changes
-                        console.log("Handsontable beforeChange source: ", source);
-                    }
-                },
-                afterChange: function (changes, source) {
-                    if (source !== 'loadData' && changes) {
-                        // Update modifiedContentJson
-                        const currentData = modifiedContentTable.getData();
-                        modifiedContentJson = convertToJson(currentData);
-                        
-                        // If filteredContentJson is not empty, update it as well
-                        if (filteredContentJson.length > 0) {
-                            filteredContentJson = filteredContentJson.map((row, index) => {
-                                const originalRow = originalData.find(origRow => origRow[0] === row[0]); // Match by Product
-                                return originalRow ? currentData[index] : row; // Update only if it exists in original
-                            });
-                        }
-                        
-                        console.log("Updated modifiedContentJson after change:", modifiedContentJson);
-                        console.log("Updated filteredContentJson after change:", filteredContentJson);
-                        if (changes) console.log("Handsontable afterChange changes: ", changes);
-                        if (source) console.log("Handsontable afterChange source: ", source);
-                        updateTableTotal(changes, source);
-                    }
-                },
+                // enable filtering
+                filters: true,
+                contextMenu: ['row_above', 'row_below', '---------', 'remove_row', '---------', 'undo'],
+
                 licenseKey: 'non-commercial-and-evaluation',
             });
 
             // Update total immediately after loading data
             updateTableTotal();
 
-            // Hook for row index and Product column text
-            modifiedContentTable.addHook('afterSelectionEnd', function (row) {
-                this.selectedRowIndex = row;
-                this.selectedRow = modifiedContentTable.getDataAtCell(row);
+            // add a filter input listener
+            filterField.addEventListener('keyup', (event) => {
+            const filters = modifiedContentTable.getPlugin('filters');
+            const columnSelector = document.getElementById('columns');
+            const columnValue = columnSelector.value;
+
+            filters.removeConditions(columnValue);
+            filters.addCondition(columnValue, 'contains', [event.target.value]);
+            filters.filter();
+            modifiedContentTable.render();
             });
 
-            // Delete row button logic
-            document.getElementById('deleteRowButton').addEventListener('click', function () {
-                const selectedRowIndex = modifiedContentTable.selectedRowIndex;
-                console.info("deleteRowButton selectedRowIndex:", selectedRowIndex);
-                if (selectedRowIndex !== undefined) {
-                    const confirmed = confirm("Are you sure you want to delete row " + modifiedContentTable.getDataAtCell(selectedRowIndex, 0) + "?");
-                    
-                    if (confirmed) {
-                        const rowToDeleteArray = modifiedContentTable.getDataAtRow(modifiedContentTable.selectedRowIndex)
-                        // Construct the rowToDelete object
-                        const rowToDelete = {
-                            Product: rowToDeleteArray[0], // Assuming the 1 column is 'Product'
-                            Total: rowToDeleteArray[1],   // Assuming the 2 column is 'Total'
-                            Division: rowToDeleteArray[2]  // Assuming the 3 column is 'Division'
-                        };
-                        console.info("deleteRowButton rowToDelete:", rowToDelete);
-                        // Check if the table is filtered
-                        if (filteredContentJson.length > 0) {
-                            console.info("deleteRowButton filteredContentJson before delete:", filteredContentJson);
-                            filteredContentJson = filteredContentJson.filter(row => !Object.keys(rowToDelete).every(key => row[key] === rowToDelete[key]));
-                            console.info("deleteRowButton filteredContentJson after delete:", filteredContentJson);
-                            // Reload filtered data back to the table
-                            modifiedContentTable.loadData(filteredContentJson);
-                        } else {
-                            // If not filtered, remove from modifiedContentJson
-                            modifiedContentJson = modifiedContentJson.filter(row => !Object.keys(rowToDelete).every(key => row[key] === rowToDelete[key]));
-
-                            // Remove from Handsontable
-                            modifiedContentTable.alter('remove_row', selectedRowIndex);
-                            // Save original data before changes
-                            originalData = modifiedContentTable.getData();
-                            console.log("Handsontable originalData: ", originalData);
-                        }
-
-                        updateTableTotal();
-                    }
-                } else {
-                    alert("Please select a row to delete.");
-                }
+            modifiedContentTable.addHookOnce('afterRemoveRow', function (changes, source) {
+                console.info("afterRemoveRow :", changes, source);
+                updateTableTotal(changes, source);
             });
-
-
-            // Filter similar rows
-            document.getElementById('filterSimilarRowsButton').addEventListener('click', function () {
-                if (modifiedContentTable.selectedRowIndex !== undefined) {
-                    const selectedRowProduct = modifiedContentTable.getDataAtCell(modifiedContentTable.selectedRowIndex, 0);
-                    
-                    // Find rows containing similar Product text
-                    filteredContentJson = modifiedContentJson.filter((row) => 
-                        row.Product && row.Product.includes(selectedRowProduct)
-                    );
-
-                    // Update Handsontable with filtered data
-                    modifiedContentTable.loadData(filteredContentJson);
-                    updateTableTotal();
-                } else {
-                    alert("Please select a row to filter by Product.");
-                }
+            modifiedContentTable.addHookOnce('afterUndo', function (changes, source) {
+                console.info("afterUndo :", changes, source);
+                updateTableTotal(changes, source);
             });
-            // Clear filter button
-            document.getElementById('clearFilterButton').addEventListener('click', function () {
-                // Update original data with changes made to filtered rows
-                const currentData = modifiedContentTable.getData();
-                filteredContentJson.forEach((row, index) => {
-                    modifiedContentJson.forEach((originalRow, originalIndex) => {
-                        if (row.Product === originalRow.Product) {
-                            modifiedContentJson[originalIndex] = currentData[index]; // Update original data
-                        }
-                    });
-                });
-
-                // Reset to original data
-                modifiedContentTable.loadData(modifiedContentJson);
-                filteredContentJson = []; // Clear filtered data
+            modifiedContentTable.addHookOnce('afterSetDataAtCell', function (changes, source) {
+                console.info("afterSetDataAtCell :", changes, source);
+                updateTableTotal(changes, source);
             });
+            
         } catch (e) {
             console.error("Failed to parse JSON:", e);
         }
