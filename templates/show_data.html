@@ -3,6 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community/styles/ag-grid.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community/styles/ag-theme-alpine.css">
+
     <title>Show Data</title>
     <style>
         .table-container {
@@ -141,7 +144,7 @@
             })
             .catch(error => console.error('Error exporting to Excel:', error));
         }
-        
+
         function filterData() {
             const divisionCode = document.getElementById('division-select').value;
             const table = document.getElementById('data-table');

@@ -270,53 +270,62 @@ def show_data():
                        MONTH(s.date_of_change) AS month_number
                 FROM sales s
                 JOIN division d ON s.division_code = d.code
+                ORDER BY MONTH(s.date_of_change), s.product
             """
             cursor.execute(query)
             results = cursor.fetchall()  
 
-        # Convert results to DataFrame
-        columns = ['Product', 'Total', 'Division', 'Month', 'Month Number']
-        data = pd.DataFrame(results, columns=columns)
+        # Initialize a dictionary to hold the pivoted data
+        pivot_data = {}
+        months_order = []
+        products = set()
+        divisions = set()
 
-        # Pivot the DataFrame
-        pivot_table = data.pivot_table(
-            index=['Product', 'Division'],  
-            columns='Month',  
-            values='Total', 
-            aggfunc='sum',  
-            fill_value=0  
-        )
+        # Process each row and build the months_order
+        for row in results:
+            product, total, division_name, month_name, month_number = row
+            # Add months to the order list if not already present
+            if month_name not in months_order:
+                months_order.append(month_name)
 
-        # Sort the pivot table columns based on month number
-        pivot_table = pivot_table.reindex(
-            sorted(pivot_table.columns, key=lambda x: data[data['Month'] == x]['Month Number'].values[0]),
-            axis=1
-        )
+        # Process each row and build the pivoted data
+        for row in results:
+            product, total, division_name, month_name, month_number = row
 
-        pivot_table.reset_index(inplace=True)
+            # Create a key for each product and division combination
+            product_division_key = f"{product}_{division_name}"
 
-        # Add a summary row
-        summary_row = pivot_table.sum(numeric_only=True)
-        summary_row['Product'] = '! Итого:'
-        summary_row['Division'] = ''
-        pivot_table = pd.concat([summary_row.to_frame().T, pivot_table], ignore_index=True)
+            # Initialize the dictionary for the key if not already present
+            if product_division_key not in pivot_data:
+                pivot_data[product_division_key] = {
+                    "Product": product,
+                    "Division": division_name,
+                    **{month: 0 for month in months_order}  # Initialize all months to 0
+                }
 
-        # Add a flag to identify the total row
-        pivot_table['Total Row'] = pivot_table['Product'] == '! Итого:'
+            print('product_division_key, month_name, total:', product_division_key, month_name, total)
 
-        # Extract total values
-        total_row = pivot_table[pivot_table['Total Row']].iloc[0]  # Get the first total row
-        
-        # Store necessary total data in the session (if needed)
-        session['total_row'] = total_row[2:].to_dict()  # Store only month totals
+            # Add the total to the corresponding month
+            if month_name in pivot_data[product_division_key]:
+                pivot_data[product_division_key][month_name] += total
+            else:
+                # Handle the case where month_name doesn't exist (though it should if months_order is correct)
+                pivot_data[product_division_key][month_name] = total
+
+            # Track products and divisions
+            products.add(product)
+            divisions.add(division_name)
+
+        # Convert pivot_data dictionary to a list of rows (for AG Grid)
+        pivot_table_rows = list(pivot_data.values())
 
     except pymysql.MySQLError as e:
         return render_template('show_data.html', error=str(e), data=[], divisions=[])
 
-    # Prepare division list for filtering
-    division_list = [{'code': d[0], 'name': d[1]} for d in results]
-
-    return render_template('show_data.html', data=pivot_table.to_dict(orient='records'), divisions=division_list)
+    # Render the template and pass data for AG Grid
+    return render_template('show_data.html', 
+                           data=pivot_table_rows,  # Pass the processed data
+                           months=months_order)  # Optionally, pass the months for filtering
 
 @app.route('/export')
 def export():
