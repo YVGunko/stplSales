@@ -7,7 +7,7 @@
     <style>
         .table-container {
             width: 100%;
-            max-height: 360px; /* Set desired height */
+            max-height: fit-content; /* Set desired height */
             overflow-y: auto;   /* Enable vertical scrolling */
             border: 1px solid #ccc; /* Optional border for the container */
             margin-top: 10px; /* Optional spacing */
@@ -60,6 +60,8 @@
         <button onclick="sortData('product')">Sort by Product</button>
         <button onclick="sortData('division_total')">Sort by Division and Total</button>
         <button onclick="sortData('division_product')">Sort by Division and Product</button>
+        <!-- Other buttons -->
+        <button onclick="exportToExcel()">Export to Excel</button>
     </div>
 
     <div class="table-container">
@@ -68,26 +70,26 @@
                 <tr>
                     <th>Product</th>
                     <th>Division</th>
-                    {% for month in month_totals.keys() %}
+                    {% for month in data[0].keys() if month not in ['Product', 'Division', 'Total Row'] %}
                         <th>{{ month }}</th>
                     {% endfor %}
                 </tr>
             </thead>            
             <tbody>
                 {% for row in data %}
-                    {% if row.Total_Row %}
+                    {% if row['Total Row'] %}
                         <tr class="bold">
                             <td colspan="2">! Итого:</td>
-                            {% for month in month_totals.keys() %}
-                                <td>{{ month_totals[month] }}</td>
+                            {% for month in data[0].keys() if month not in ['Product', 'Division', 'Total Row'] %}
+                                <td>{{ row[month] }}</td>
                             {% endfor %}
                         </tr>
                     {% else %}
                         <tr>
                             <td>{{ row.Product }}</td>
                             <td>{{ row.Division }}</td>
-                            {% for month in month_totals.keys() %}
-                                <td>{{ row[month|capitalize] }}</td>
+                            {% for month in data[0].keys() if month not in ['Product', 'Division', 'Total Row'] %}
+                                <td>{{ row[month] }}</td>
                             {% endfor %}
                         </tr>
                     {% endif %}
@@ -119,21 +121,82 @@
         // Call fetchDivisions on page load
         document.addEventListener('DOMContentLoaded', fetchDivisions);
 
+        function exportToExcel() {
+            fetch('/export', {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            })
+            .then(response => response.blob())
+            .then(blob => {
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'data_export.xlsx'; // Filename for the download
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                window.URL.revokeObjectURL(url);
+            })
+            .catch(error => console.error('Error exporting to Excel:', error));
+        }
+        
         function filterData() {
             const divisionCode = document.getElementById('division-select').value;
             const table = document.getElementById('data-table');
             const rows = table.getElementsByTagName('tbody')[0].rows;
-
+            
+            // Initialize totals for the filtered data
+            const monthTotals = {};
+            
             for (let row of rows) {
+                const isTotalRow = row.cells[0].innerText === '! Итого:';
                 const divisionCell = row.cells[1]?.innerText; // Division name is now in the second column
                 const rowDivisionCode = getDivisionCodeFromName(divisionCell); // Convert name back to code for comparison
+
+                if (isTotalRow) {
+                    continue; // Skip the total row for now
+                }
+
                 if (divisionCode === "" || rowDivisionCode === divisionCode) {
                     row.style.display = ""; // Show row
+                    
+                    // Calculate month totals for visible rows
+                    for (let i = 2; i < row.cells.length; i++) { // Start from index 2 for month columns
+                        const rawValue = row.cells[i].innerText; // Get the raw value as a string
+                        console.log(`Raw value for month ${i}: ${rawValue}`); // Log the raw value
+
+                        const value = parseFloat(rawValue) || 0; // Parse the value or default to 0
+                        console.log(`Parsed value for month ${i}: ${value}`); // Log the parsed value
+
+                        const month = table.getElementsByTagName('thead')[0].rows[0].cells[i].innerText; // Get the month name
+
+                        // Accumulate totals
+                        monthTotals[month] = (monthTotals[month] || 0) + value; // Accumulate totals
+                    }
                 } else {
                     row.style.display = "none"; // Hide row
                 }
             }
+
+            // Debugging: log final month totals
+            console.log('Final Month Totals:', monthTotals);
+
+            // Update the total row
+            const totalRow = Array.from(rows).find(row => row.cells[0].innerText === '! Итого:');
+            if (totalRow) {
+                for (let i = 2; i < totalRow.cells.length; i++) { // Start from index 2 for month columns
+                    const month = table.getElementsByTagName('thead')[0].rows[0].cells[i].innerText; // Get the month name
+                    totalRow.cells[i].innerText = monthTotals[month] || 0; // Update the total cell
+
+                    // Debugging: log total for each month
+                    console.log(`Setting total for ${month}: ${totalRow.cells[i].innerText}`); // Log the assignment
+                }
+            }
         }
+
+
 
         function getDivisionCodeFromName(divisionName) {
             const divisionSelect = document.getElementById('division-select');
@@ -191,6 +254,52 @@
             // Append sorted rows back to the table
             rows.forEach(row => tbody.appendChild(row));
         }
+
+        // Localize month names
+        function localizeMonths() {
+            const monthMapping = {
+                'January': 'Январь', 
+                'February': 'Февраль', 
+                'March': 'Март', 
+                'April': 'Апрель', 
+                'May': 'Мая', 
+                'June': 'Июнь', 
+                'July': 'Июль', 
+                'August': 'Август', 
+                'September': 'Сентябрь', 
+                'October': 'Октябрь', 
+                'November': 'Ноябрь', 
+                'December': 'Декабрь'
+            };
+
+            const table = document.getElementById('data-table');
+            const headerCells = table.getElementsByTagName('th');
+
+            // Localize header month names
+            for (let i = 2; i < headerCells.length; i++) { // Start from index 2 to skip Product and Division
+                const monthName = headerCells[i].innerText;
+                if (monthMapping[monthName]) {
+                    headerCells[i].innerText = monthMapping[monthName];
+                }
+            }
+
+            const bodyRows = table.getElementsByTagName('tbody')[0].rows;
+
+            // Localize month names in each row
+            for (let row of bodyRows) {
+                for (let i = 2; i < row.cells.length; i++) { // Again, start from index 2
+                    const monthName = row.cells[i].innerText;
+                    if (monthMapping[monthName]) {
+                        row.cells[i].innerText = monthMapping[monthName];
+                    }
+                }
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            fetchDivisions();
+            localizeMonths();
+        });
     </script>
 </body>
 </html>

@@ -4,51 +4,77 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Excel Analyzer</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/handsontable/dist/handsontable.full.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/handsontable/dist/handsontable.full.min.js"></script>
     <style>
+        body {
+            display: flex;
+            justify-content: space-between;
+            margin: 20px;
+            flex-wrap: wrap;
+        }
+        .left-panel, .right-panel {
+            width: 48%;
+            height: 90vh;
+        }
         table.data {
-            border-collapse: collapse;
             width: 100%;
+            border-collapse: collapse;
+            table-layout: auto;
         }
         table.data th, table.data td {
             border: 1px solid black;
             padding: 8px;
             text-align: left;
         }
-        .table-container {
+        @media (max-width: 768px) {
+            table.data th, table.data td {
+                padding: 6px;
+                font-size: 12px;
+            }
+        }
+        .table-container-left, .table-container-right {
             width: 100%;
-            max-height: 360px; /* Set desired height */
-            overflow-y: auto;   /* Enable vertical scrolling */
-            border: 1px solid #ccc; /* Optional border for the container */
-            margin-top: 10px; /* Optional spacing */
+            max-height: 75%;
+            overflow-y: auto;
+            overflow-x: auto;
+            border: 1px solid #ccc;
+            margin-top: 10px;
+            margin-bottom: 10px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
         }
     </style>
 </head>
 <body>
-    <h1>Upload and Analyze XLSX File</h1>
-    <form action="/" method="post" enctype="multipart/form-data" style="display: flex; align-items: center;">
-        <input type="file" name="file" accept=".xlsx,.xls" required style="margin-right: 10px;">
-        <button type="submit" style="margin-right: 10px;">Upload</button>
-        <p id="status" style="margin: 0;">{{ status }}</p>
-    </form>
-    
+    <div class="left-panel">
+        <h1>Upload XLSX File</h1>
+        <form action="/" method="post" enctype="multipart/form-data" style="display: flex; flex-direction: column; margin-right: 10px;">
+            <input type="file" name="file" accept=".xlsx,.xls" required>
+            <div style="display: flex; align-items: center; margin-top: 10px;">
+                <button type="submit" style="margin-right: 10px;">Upload</button>
+                <p id="status" style="margin: 0;">{{ status }}</p>
+            </div>
+        </form>
 
-    {% if uploaded_file %}
-        <h2>Uploaded File Content</h2>
-        <div class="table-container">
-            <div>{{ uploaded_file|safe }}</div>
-        </div>
-    {% endif %}
+        {% if uploaded_file %}
+            <h2>Uploaded File Content</h2>
+            <div class="table-container-left">
+                <div>{{ uploaded_file|safe }}</div>
+            </div>
+        {% else %}
+            <h2>Please, choose a file to load, click Upload button and wait a bit ...</h2>
+        {% endif %}
+        {% if file_total %}
+            <h3 id="file_total" style="margin: 0;">Uploaded File Total: {{ file_total }}</h3>
+        {% endif %}
+    </div>
 
-    {% if modified_content %}
+    {% if modified_content_json %}
+    <div class="right-panel">
         <h2>Modified Content</h2>
-        <div class="table-container">
-            <div>{{ modified_content|safe }}</div>
-        </div>
-
         <label for="monthInput">Select Month:</label>
         <select id="monthInput" onchange="toggleSaveButton()">
             <option value="">--Select Month--</option>
-            <!-- Populate month options -->
             {% for month in range(1, 13) %}
                 <option value="{{ month }}">{{ month }}</option>
             {% endfor %}
@@ -57,99 +83,276 @@
         <label for="yearInput">Select Year:</label>
         <select id="yearInput" onchange="toggleSaveButton()">
             <option value="">--Select Year--</option>
-            <!-- Populate year options, adjust as needed -->
             {% for year in range(current_year - 5, current_year + 1) %}
                 <option value="{{ year }}">{{ year }}</option>
             {% endfor %}
         </select>
 
         <button id="saveButton" onclick="saveData()" disabled>Save on Server</button>
-
-        <script>
-            // Initialize modifiedContent with an empty array
-            let modifiedContent = [];
+        <div id="modifiedContentContainer" class="table-container-right">
+            <div id="modifiedContentTable"></div>
+        </div>
         
-            try {
-                const jsonString = '{{ modified_content_json|safe }}';
-                if (jsonString) {
-                    modifiedContent = JSON.parse(jsonString);
-                }
-            } catch (e) {
-                console.error("Failed to parse JSON:", e);
+        <div style="display: flex; align-items: center; margin-top: 10px;">
+            <button id="deleteRowButton" style="margin-right: 10px;">Delete Selected Row</button>
+            <button id="filterSimilarRowsButton" style="margin-right: 10px;">Filter Similar Rows</button>
+            <button id="clearFilterButton">Clear Filter</button>
+        </div>
+        <div>
+            <p id="last_changes" style="margin: 0;">{{ last_changes }}</p>
+        </div>
+        <div>
+            <h3 id="tableTotal" style="margin: 0;">Table Total: 0</h3>
+        </div>
+    </div>
+
+    <script>
+        let modifiedContentJson = []; // Original Json
+        let filteredContentJson = []; // For filtered Json
+        let originalData = []; // For data before changes
+        let modifiedContentTable;
+
+        // Load data into Handsontable and calculate total
+        try {
+            const jsonString = '{{ modified_content_json|safe }}';
+            if (jsonString) {
+                modifiedContentJson = JSON.parse(jsonString);
+                originalData = modifiedContentJson;
+                console.info("modifiedContentJson:", modifiedContentJson);
             }
 
-            // Function to toggle the save button based on month and year input
-            function toggleSaveButton() {
-                const monthInput = document.getElementById('monthInput').value;
-                const yearInput = document.getElementById('yearInput').value;
-                const saveButton = document.getElementById('saveButton');
-                saveButton.disabled = !(monthInput && yearInput); // Enable if both inputs have values
+            // Initialize Handsontable
+            const colHeaders = Object.keys(modifiedContentJson[0]);
+            // Function to convert Handsontable data to JSON
+            function convertToJson(data) {
+                return data.map(row => {
+                    return colHeaders.reduce((acc, header, index) => {
+                        acc[header] = row[index];
+                        return acc;
+                    }, {});
+                });
             }
-
-            // Pre-fill the month and year inputs on page load
-            document.addEventListener('DOMContentLoaded', () => {
-                const now = new Date();
-                const monthInput = document.getElementById('monthInput');
-                const yearInput = document.getElementById('yearInput');
-
-                // Set the current month (JavaScript months are 0-indexed)
-                monthInput.value = now.getMonth() + 1; // +1 to convert from 0-indexed to 1-indexed
-                // Set the current year
-                yearInput.value = now.getFullYear();
-                
-                // Enable the save button if both month and year are selected
-                toggleSaveButton();
+            // Initialize Handsontable
+            modifiedContentTable = new Handsontable(document.getElementById('modifiedContentTable'), {
+                data: modifiedContentJson,
+                colHeaders: colHeaders,
+                columns: [
+                    { data: colHeaders[0], type: 'text' },
+                    { data: colHeaders[1], type: 'numeric' },
+                    { data: colHeaders[2], type: 'dropdown', source: ['0', '00-000002', '00-000025', '00-000047'] },
+                ],
+                columnSorting: true,
+                rowHeaders: true,
+                width: '100%',
+                height: 'auto',
+                stretchH: 'all',
+                selectionMode: 'row',
+                beforeChange: function (changes, source) {
+                    if (changes) {
+                        // Save original data before changes
+                        console.log("Handsontable beforeChange changes: ", changes);
+                    }
+                    if (source) {
+                        // Save original data before changes
+                        console.log("Handsontable beforeChange source: ", source);
+                    }
+                },
+                afterChange: function (changes, source) {
+                    if (source !== 'loadData' && changes) {
+                        // Update modifiedContentJson
+                        const currentData = modifiedContentTable.getData();
+                        modifiedContentJson = convertToJson(currentData);
+                        
+                        // If filteredContentJson is not empty, update it as well
+                        if (filteredContentJson.length > 0) {
+                            filteredContentJson = filteredContentJson.map((row, index) => {
+                                const originalRow = originalData.find(origRow => origRow[0] === row[0]); // Match by Product
+                                return originalRow ? currentData[index] : row; // Update only if it exists in original
+                            });
+                        }
+                        
+                        console.log("Updated modifiedContentJson after change:", modifiedContentJson);
+                        console.log("Updated filteredContentJson after change:", filteredContentJson);
+                        if (changes) console.log("Handsontable afterChange changes: ", changes);
+                        if (source) console.log("Handsontable afterChange source: ", source);
+                        updateTableTotal(changes, source);
+                    }
+                },
+                licenseKey: 'non-commercial-and-evaluation',
             });
 
-            async function saveData() {
-                const month = document.getElementById('monthInput').value; // Get the selected month
-                const year = document.getElementById('yearInput').value; // Get the selected year
-                
-                // Determine the last day of the month
-                const lastDay = new Date(year, month, 0).getDate();
-                const selectedDate = `${year}-${month.padStart(2, '0')}-${lastDay}`; // Format: YYYY-MM-DD
+            // Update total immediately after loading data
+            updateTableTotal();
 
-                const response = await fetch('/api/save', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ date: selectedDate, data: modifiedContent }),
-                });
+            // Hook for row index and Product column text
+            modifiedContentTable.addHook('afterSelectionEnd', function (row) {
+                this.selectedRowIndex = row;
+                this.selectedRow = modifiedContentTable.getDataAtCell(row);
+            });
 
-                const result = await response.json();
+            // Delete row button logic
+            document.getElementById('deleteRowButton').addEventListener('click', function () {
+                const selectedRowIndex = modifiedContentTable.selectedRowIndex;
+                console.info("deleteRowButton selectedRowIndex:", selectedRowIndex);
+                if (selectedRowIndex !== undefined) {
+                    const confirmed = confirm("Are you sure you want to delete row " + modifiedContentTable.getDataAtCell(selectedRowIndex, 0) + "?");
+                    
+                    if (confirmed) {
+                        const rowToDeleteArray = modifiedContentTable.getDataAtRow(modifiedContentTable.selectedRowIndex)
+                        // Construct the rowToDelete object
+                        const rowToDelete = {
+                            Product: rowToDeleteArray[0], // Assuming the 1 column is 'Product'
+                            Total: rowToDeleteArray[1],   // Assuming the 2 column is 'Total'
+                            Division: rowToDeleteArray[2]  // Assuming the 3 column is 'Division'
+                        };
+                        console.info("deleteRowButton rowToDelete:", rowToDelete);
+                        // Check if the table is filtered
+                        if (filteredContentJson.length > 0) {
+                            console.info("deleteRowButton filteredContentJson before delete:", filteredContentJson);
+                            filteredContentJson = filteredContentJson.filter(row => !Object.keys(rowToDelete).every(key => row[key] === rowToDelete[key]));
+                            console.info("deleteRowButton filteredContentJson after delete:", filteredContentJson);
+                            // Reload filtered data back to the table
+                            modifiedContentTable.loadData(filteredContentJson);
+                        } else {
+                            // If not filtered, remove from modifiedContentJson
+                            modifiedContentJson = modifiedContentJson.filter(row => !Object.keys(rowToDelete).every(key => row[key] === rowToDelete[key]));
 
-                // Handle confirmation if records exist
-                if (result.status === 'warning' && result.confirm_deletion) {
-                    const userConfirmed = confirm(result.message);
-                    if (userConfirmed) {
-                        // User confirmed deletion, call the delete and save endpoint
-                        await deleteAndSaveData(selectedDate, modifiedContent);
+                            // Remove from Handsontable
+                            modifiedContentTable.alter('remove_row', selectedRowIndex);
+                            // Save original data before changes
+                            originalData = modifiedContentTable.getData();
+                            console.log("Handsontable originalData: ", originalData);
+                        }
+
+                        updateTableTotal();
                     }
                 } else {
-                    alert(result.message);
-                    if (result.status === 'success') {
-                        window.location.href = '/show_data';  // Redirect to show_data page
-                    }
+                    alert("Please select a row to delete.");
                 }
-            }
+            });
 
-            async function deleteAndSaveData(selectedDate, modifiedContent) {
-                const response = await fetch('/api/delete_and_save', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ date: selectedDate, data: modifiedContent }),
+
+            // Filter similar rows
+            document.getElementById('filterSimilarRowsButton').addEventListener('click', function () {
+                if (modifiedContentTable.selectedRowIndex !== undefined) {
+                    const selectedRowProduct = modifiedContentTable.getDataAtCell(modifiedContentTable.selectedRowIndex, 0);
+                    
+                    // Find rows containing similar Product text
+                    filteredContentJson = modifiedContentJson.filter((row) => 
+                        row.Product && row.Product.includes(selectedRowProduct)
+                    );
+
+                    // Update Handsontable with filtered data
+                    modifiedContentTable.loadData(filteredContentJson);
+                    updateTableTotal();
+                } else {
+                    alert("Please select a row to filter by Product.");
+                }
+            });
+            // Clear filter button
+            document.getElementById('clearFilterButton').addEventListener('click', function () {
+                // Update original data with changes made to filtered rows
+                const currentData = modifiedContentTable.getData();
+                filteredContentJson.forEach((row, index) => {
+                    modifiedContentJson.forEach((originalRow, originalIndex) => {
+                        if (row.Product === originalRow.Product) {
+                            modifiedContentJson[originalIndex] = currentData[index]; // Update original data
+                        }
+                    });
                 });
 
-                const result = await response.json();
+                // Reset to original data
+                modifiedContentTable.loadData(modifiedContentJson);
+                filteredContentJson = []; // Clear filtered data
+            });
+        } catch (e) {
+            console.error("Failed to parse JSON:", e);
+        }
+
+        // Function to update the table total label
+        function updateTableTotal(changes, source) {
+            if (source === 'loadData') return; // Skip if data is loaded
+            console.info("updateTableTotal source:", source);
+            let total = 0;
+            const data = modifiedContentTable.getData();
+
+            // Calculate total for the numeric column (column2)
+            for (let i = 0; i < data.length ; i++) { 
+                total += data[i][1] || 0; // Add numeric values
+            }
+
+            // Update the label and paragraph with the new total
+            document.getElementById('tableTotal').innerText = `Table Total: ${total}`;
+            if (source === 'edit')
+                    document.getElementById('last_changes').innerText = `Last changes: ${changes[1]}`;
+        }
+
+        // Function to toggle the save button based on month and year input
+        function toggleSaveButton() {
+            const monthInput = document.getElementById('monthInput').value;
+            const yearInput = document.getElementById('yearInput').value;
+            const saveButton = document.getElementById('saveButton');
+
+            saveButton.disabled = !(monthInput && yearInput && modifiedContentTable); // Enable if both inputs have values
+        }
+
+        // Pre-fill the month and year inputs on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            const now = new Date();
+            const yearInput = document.getElementById('yearInput');
+            yearInput.value = now.getFullYear();
+            toggleSaveButton();
+        });
+
+        async function saveData() {
+            const month = document.getElementById('monthInput').value;
+            const year = document.getElementById('yearInput').value;
+
+            // Determine the last day of the month
+            const lastDay = new Date(year, month, 0).getDate();
+            const selectedDate = `${year}-${month.padStart(2, '0')}-${lastDay}`; // Format: YYYY-MM-DD
+
+            // Update modifiedContentJson with the current table data converted to JSON
+            const currentData = modifiedContentTable.getData();
+            modifiedContentJson = convertToJson(currentData);
+            console.info("modifiedContentJson:", modifiedContentJson);
+
+            const response = await fetch('/api/save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ date: selectedDate, data: modifiedContentJson }),
+            });
+
+            const result = await response.json();
+
+            // Handle confirmation if records exist
+            if (result.status === 'warning' && result.confirm_deletion) {
+                const userConfirmed = confirm(result.message);
+                if (userConfirmed) {
+                    await deleteAndSaveData(selectedDate, modifiedContentJson);
+                }
+            } else {
                 alert(result.message);
                 if (result.status === 'success') {
                     window.location.href = '/show_data';  // Redirect to show_data page
                 }
             }
-        </script>
+        }
+
+        async function deleteAndSaveData(selectedDate, jsonData) {
+            const response = await fetch('/api/delete_and_save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ date: selectedDate, data: jsonData }),
+            });
+
+            const result = await response.json();
+            alert(result.message);
+            if (result.status === 'success') {
+                window.location.href = '/show_data';  // Redirect to show_data page
+            }
+        }
+    </script>
     {% endif %}
 </body>
 </html>
