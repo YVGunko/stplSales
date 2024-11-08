@@ -7,7 +7,7 @@
 
     <!-- AG Grid Community styles and scripts -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community/styles/ag-grid.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community/styles/ag-theme-alpine.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community/styles/ag-theme-balham.css">
     <script src="https://cdn.jsdelivr.net/npm/ag-grid-community/dist/ag-grid-community.noStyle.js"></script>
 </head>
 <body>
@@ -15,22 +15,24 @@
   <h1>Product Sales Data</h1>
 
   <!-- AG Grid Container -->
-  <div id="myGrid" class="ag-theme-alpine"></div>
+  <div id="myGrid" class="ag-theme-balham"></div>
 
   <script>
-    // Column Definitions for AG-Grid
-    const columnDefs = [
-      { headerName: "Product", field: "Product", sortable: true, filter: true },
-      { headerName: "Division", field: "Division", sortable: true, filter: true },
-      
-      {% for month in months %}
-        { headerName: "{{ month }}", field: "{{ month }}", sortable: true, filter: true },
-      {% endfor %}
-
-      { headerName: "Total", field: "Total", sortable: true, filter: true },
-    ];
-
-    // Example data passed from the server (replace this with the actual data)
+    const monthMapping = {
+            'January': 'Январь', 
+            'February': 'Февраль', 
+            'March': 'Март', 
+            'April': 'Апрель', 
+            'May': 'Мая', 
+            'June': 'Июнь', 
+            'July': 'Июль', 
+            'August': 'Август', 
+            'September': 'Сентябрь', 
+            'October': 'Октябрь', 
+            'November': 'Ноябрь', 
+            'December': 'Декабрь'
+        };
+    const availableMonths = new Set();
     const rowData = [
       {% for row in data %}
         {
@@ -43,6 +45,29 @@
         },
       {% endfor %}
     ];
+    rowData.forEach(row => {
+        Object.keys(row).forEach(field => {
+            if (monthMapping[field]) {
+                availableMonths.add(field);  // Add only if it's a valid month
+            }
+        });
+    });
+    // Column Definitions for AG-Grid
+    const columnDefs = [
+      { headerName: "Product", field: "Product", sortable: true, filter: true },
+      { headerName: "Division", field: "Division", sortable: true, filter: true },
+      
+      ...Array.from(availableMonths).map(month => ({
+            headerName: monthMapping[month],  // Russian month name
+            field: month,                     // English month name as field name to match data
+            sortable: true,
+            filter: true
+        })),
+
+      { headerName: "Total", field: "Total", sortable: true, filter: true },
+    ];
+
+
 
     // Grid options
     const gridOptions = {
@@ -50,30 +75,19 @@
         rowData: rowData,
         animateRows: true,
         domLayout: 'autoHeight',
-        grandTotalRow: true,  // Include summary footer for groups
-        suppressAggFuncInHeader: true,  // Remove aggregation function names from headers
+
         pagination: true,  // Enable pagination
         paginationPageSize: 20,
-        enableSorting: true,  // Enable sorting
-        enableFilter: true,  // Enable filtering
+        grandTotalRow: "top",
 
         defaultColDef: {
             sortable: true,
             filter: true,
             resizable: true,
         },
-        autoGroupColumnDef: {
-            headerName: 'Product Name',
-            width: 180,
-            cellRendererParams: {
-                suppressCount: true,  // Don't show the count of rows in the group
-            },
-        },
+
         autoSizeStrategy: {
             type: 'fitCellContents'
-            },
-            locale: {
-                localeText: AG_CHARTS_LOCALE_RU_RU,
             },
     };
 
