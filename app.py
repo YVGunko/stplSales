@@ -278,14 +278,12 @@ def show_data():
         # Initialize a dictionary to hold the pivoted data
         pivot_data = {}
         months_order = []
-        products = set()
-        divisions = set()
+        seen_months = set()
 
-        # Process each row and build the months_order
         for row in results:
-            product, total, division_name, month_name, month_number = row
-            # Add months to the order list if not already present
-            if month_name not in months_order:
+            month_name = row[3]  # Assuming month_name is at index 3
+            if month_name not in seen_months:
+                seen_months.add(month_name)
                 months_order.append(month_name)
 
         # Process each row and build the pivoted data
@@ -303,8 +301,6 @@ def show_data():
                     **{month: 0 for month in months_order}  # Initialize all months to 0
                 }
 
-            print('product_division_key, month_name, total:', product_division_key, month_name, total)
-
             # Add the total to the corresponding month
             if month_name in pivot_data[product_division_key]:
                 pivot_data[product_division_key][month_name] += total
@@ -312,9 +308,9 @@ def show_data():
                 # Handle the case where month_name doesn't exist (though it should if months_order is correct)
                 pivot_data[product_division_key][month_name] = total
 
-            # Track products and divisions
-            products.add(product)
-            divisions.add(division_name)
+        # Add a 'Total' column for each product
+        for key, data in pivot_data.items():
+            data["Total"] = sum(data[month] for month in months_order)
 
         # Convert pivot_data dictionary to a list of rows (for AG Grid)
         pivot_table_rows = list(pivot_data.values())

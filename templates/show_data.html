@@ -1,308 +1,88 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sales Data with AG Grid</title>
+
+    <!-- AG Grid Community styles and scripts -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community/styles/ag-grid.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community/styles/ag-theme-alpine.css">
-
-    <title>Show Data</title>
-    <style>
-        .table-container {
-            width: 100%;
-            max-height: fit-content; /* Set desired height */
-            overflow-y: auto;   /* Enable vertical scrolling */
-            border: 1px solid #ccc; /* Optional border for the container */
-            margin-top: 10px; /* Optional spacing */
-        }
-
-        table.data {
-            border-collapse: collapse;
-            width: 100%;
-        }
-
-        table.data th, table.data td {
-            border: 1px solid black;
-            padding: 8px;
-            text-align: left;
-        }
-
-        thead th {
-            position: sticky; /* Enable sticky positioning */
-            top: 0; /* Set the top position */
-            background: #fff; /* Set background color for visibility */
-            z-index: 1; /* Ensure the header is above the content */
-        }
-
-        .bold {
-            font-weight: bold; /* Make total row bold */
-            background-color: #f0f0f0; /* Optional: Highlight the total row */
-        }
-
-        select {
-            font-size: 16px; /* Adjust font size */
-            padding: 5px; /* Add some padding */
-            color: #000; /* Text color */
-            background-color: #fff; /* Background color */
-            border: 1px solid #ccc; /* Border for better definition */
-            border-radius: 4px; /* Rounded corners */
-        }
-    </style>
+    <script src="https://cdn.jsdelivr.net/npm/ag-grid-community/dist/ag-grid-community.noStyle.js"></script>
 </head>
 <body>
-    <h1>Data from Database</h1>
 
-    <div>
-        <label for="division-select">Filter by Division:</label>
-        <select id="division-select" onchange="filterData()">
-            <option value="">Все подразделения</option> <!-- Default unfiltered option -->
-            <!-- Options will be populated dynamically -->
-        </select>
+  <h1>Product Sales Data</h1>
 
-        <button onclick="sortData('total')">Sort by Total</button>
-        <button onclick="sortData('product')">Sort by Product</button>
-        <button onclick="sortData('division_total')">Sort by Division and Total</button>
-        <button onclick="sortData('division_product')">Sort by Division and Product</button>
-        <!-- Other buttons -->
-        <button onclick="exportToExcel()">Export to Excel</button>
-    </div>
+  <!-- AG Grid Container -->
+  <div id="myGrid" class="ag-theme-alpine"></div>
 
-    <div class="table-container">
-        <table class="data" id="data-table">
-            <thead>
-                <tr>
-                    <th>Product</th>
-                    <th>Division</th>
-                    {% for month in data[0].keys() if month not in ['Product', 'Division', 'Total Row'] %}
-                        <th>{{ month }}</th>
-                    {% endfor %}
-                </tr>
-            </thead>            
-            <tbody>
-                {% for row in data %}
-                    {% if row['Total Row'] %}
-                        <tr class="bold">
-                            <td colspan="2">! Итого:</td>
-                            {% for month in data[0].keys() if month not in ['Product', 'Division', 'Total Row'] %}
-                                <td>{{ row[month] }}</td>
-                            {% endfor %}
-                        </tr>
-                    {% else %}
-                        <tr>
-                            <td>{{ row.Product }}</td>
-                            <td>{{ row.Division }}</td>
-                            {% for month in data[0].keys() if month not in ['Product', 'Division', 'Total Row'] %}
-                                <td>{{ row[month] }}</td>
-                            {% endfor %}
-                        </tr>
-                    {% endif %}
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
+  <script>
+    // Column Definitions for AG-Grid
+    const columnDefs = [
+      { headerName: "Product", field: "Product", sortable: true, filter: true },
+      { headerName: "Division", field: "Division", sortable: true, filter: true },
+      
+      {% for month in months %}
+        { headerName: "{{ month }}", field: "{{ month }}", sortable: true, filter: true },
+      {% endfor %}
 
-    <script>
-        // Fetch divisions and populate the dropdown
-        async function fetchDivisions() {
-            try {
-                const response = await fetch('/api/divisions');
-                const divisions = await response.json();
-                
-                const divisionSelect = document.getElementById('division-select');
-                divisionSelect.innerHTML = '<option value="">Все подразделения</option>'; // Reset options
-                divisions.forEach(division => {
-                    const option = document.createElement('option');
-                    option.value = division[0]; // Assuming 'code' is at index 0
-                    option.textContent = division[1]; // Assuming 'name' is at index 1
-                    divisionSelect.appendChild(option);
-                });
-            } catch (error) {
-                console.error('Error fetching divisions:', error);
-            }
-        }
-        
-        // Call fetchDivisions on page load
-        document.addEventListener('DOMContentLoaded', fetchDivisions);
+      { headerName: "Total", field: "Total", sortable: true, filter: true },
+    ];
 
-        function exportToExcel() {
-            fetch('/export', {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-            })
-            .then(response => response.blob())
-            .then(blob => {
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = 'data_export.xlsx'; // Filename for the download
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-                window.URL.revokeObjectURL(url);
-            })
-            .catch(error => console.error('Error exporting to Excel:', error));
-        }
+    // Example data passed from the server (replace this with the actual data)
+    const rowData = [
+      {% for row in data %}
+        {
+          Product: "{{ row.Product }}",
+          Division: "{{ row.Division }}",
+          {% for month in months %}
+            "{{ month }}": {{ row[month] }},
+          {% endfor %}
+          Total: {{ row.Total }}
+        },
+      {% endfor %}
+    ];
 
-        function filterData() {
-            const divisionCode = document.getElementById('division-select').value;
-            const table = document.getElementById('data-table');
-            const rows = table.getElementsByTagName('tbody')[0].rows;
-            
-            // Initialize totals for the filtered data
-            const monthTotals = {};
-            
-            for (let row of rows) {
-                const isTotalRow = row.cells[0].innerText === '! Итого:';
-                const divisionCell = row.cells[1]?.innerText; // Division name is now in the second column
-                const rowDivisionCode = getDivisionCodeFromName(divisionCell); // Convert name back to code for comparison
+    // Grid options
+    const gridOptions = {
+        columnDefs: columnDefs,
+        rowData: rowData,
+        animateRows: true,
+        domLayout: 'autoHeight',
+        grandTotalRow: true,  // Include summary footer for groups
+        suppressAggFuncInHeader: true,  // Remove aggregation function names from headers
+        pagination: true,  // Enable pagination
+        paginationPageSize: 20,
+        enableSorting: true,  // Enable sorting
+        enableFilter: true,  // Enable filtering
 
-                if (isTotalRow) {
-                    continue; // Skip the total row for now
-                }
+        defaultColDef: {
+            sortable: true,
+            filter: true,
+            resizable: true,
+        },
+        autoGroupColumnDef: {
+            headerName: 'Product Name',
+            width: 180,
+            cellRendererParams: {
+                suppressCount: true,  // Don't show the count of rows in the group
+            },
+        },
+        autoSizeStrategy: {
+            type: 'fitCellContents'
+            },
+            locale: {
+                localeText: AG_CHARTS_LOCALE_RU_RU,
+            },
+    };
 
-                if (divisionCode === "" || rowDivisionCode === divisionCode) {
-                    row.style.display = ""; // Show row
-                    
-                    // Calculate month totals for visible rows
-                    for (let i = 2; i < row.cells.length; i++) { // Start from index 2 for month columns
-                        const rawValue = row.cells[i].innerText; // Get the raw value as a string
-                        console.log(`Raw value for month ${i}: ${rawValue}`); // Log the raw value
+    // Initialize the grid when the page loads
+    document.addEventListener('DOMContentLoaded', function () {
+        // Use createGrid to initialize the grid in AG Grid v31+
+        const gridApi = agGrid.createGrid(document.getElementById('myGrid'), gridOptions);
+    });
+  </script>
 
-                        const value = parseFloat(rawValue) || 0; // Parse the value or default to 0
-                        console.log(`Parsed value for month ${i}: ${value}`); // Log the parsed value
-
-                        const month = table.getElementsByTagName('thead')[0].rows[0].cells[i].innerText; // Get the month name
-
-                        // Accumulate totals
-                        monthTotals[month] = (monthTotals[month] || 0) + value; // Accumulate totals
-                    }
-                } else {
-                    row.style.display = "none"; // Hide row
-                }
-            }
-
-            // Debugging: log final month totals
-            console.log('Final Month Totals:', monthTotals);
-
-            // Update the total row
-            const totalRow = Array.from(rows).find(row => row.cells[0].innerText === '! Итого:');
-            if (totalRow) {
-                for (let i = 2; i < totalRow.cells.length; i++) { // Start from index 2 for month columns
-                    const month = table.getElementsByTagName('thead')[0].rows[0].cells[i].innerText; // Get the month name
-                    totalRow.cells[i].innerText = monthTotals[month] || 0; // Update the total cell
-
-                    // Debugging: log total for each month
-                    console.log(`Setting total for ${month}: ${totalRow.cells[i].innerText}`); // Log the assignment
-                }
-            }
-        }
-
-
-
-        function getDivisionCodeFromName(divisionName) {
-            const divisionSelect = document.getElementById('division-select');
-            for (let option of divisionSelect.options) {
-                if (option.textContent === divisionName) {
-                    return option.value; // Return the code associated with the name
-                }
-            }
-            return null; // If not found
-        }
-
-        function sortData(order) {
-            const table = document.getElementById('data-table');
-            const tbody = table.getElementsByTagName('tbody')[0];
-            const rows = Array.from(tbody.rows); // Convert HTMLCollection to Array
-
-            // Determine sorting function based on order
-            const sortFunction = (a, b) => {
-                let divisionA = a.cells[1].innerText.toLowerCase(); // Division name
-                let divisionB = b.cells[1].innerText.toLowerCase(); // Division name
-
-                if (order === 'total') {
-                    let totalA = parseInt(a.cells[2].innerText);
-                    let totalB = parseInt(b.cells[2].innerText);
-                    return totalB - totalA; // Sort by Total in descending order
-                } else if (order === 'product') {
-                    let productA = a.cells[0].innerText.toLowerCase();
-                    let productB = b.cells[0].innerText.toLowerCase();
-                    return productA > productB ? 1 : -1; // Sort by Product name
-                } else if (order === 'division_total') {
-                    let totalA = parseInt(a.cells[2].innerText);
-                    let totalB = parseInt(b.cells[2].innerText);
-                    if (divisionA === divisionB) {
-                        return totalB - totalA; // If divisions are equal, sort by Total
-                    }
-                    return divisionA > divisionB ? 1 : -1; // Otherwise sort by Division
-                } else if (order === 'division_product') {
-                    let productA = a.cells[0].innerText.toLowerCase();
-                    let productB = a.cells[0].innerText.toLowerCase();
-                    if (divisionA === divisionB) {
-                        return productA > productB ? 1 : -1; // If divisions are equal, sort by Product
-                    }
-                    return divisionA > divisionB ? 1 : -1; // Otherwise sort by Division
-                }
-            };
-
-            // Sort rows based on the defined sorting function
-            rows.sort(sortFunction);
-
-            // Remove existing rows and append sorted rows
-            while (tbody.firstChild) {
-                tbody.removeChild(tbody.firstChild);
-            }
-
-            // Append sorted rows back to the table
-            rows.forEach(row => tbody.appendChild(row));
-        }
-
-        // Localize month names
-        function localizeMonths() {
-            const monthMapping = {
-                'January': 'Январь', 
-                'February': 'Февраль', 
-                'March': 'Март', 
-                'April': 'Апрель', 
-                'May': 'Мая', 
-                'June': 'Июнь', 
-                'July': 'Июль', 
-                'August': 'Август', 
-                'September': 'Сентябрь', 
-                'October': 'Октябрь', 
-                'November': 'Ноябрь', 
-                'December': 'Декабрь'
-            };
-
-            const table = document.getElementById('data-table');
-            const headerCells = table.getElementsByTagName('th');
-
-            // Localize header month names
-            for (let i = 2; i < headerCells.length; i++) { // Start from index 2 to skip Product and Division
-                const monthName = headerCells[i].innerText;
-                if (monthMapping[monthName]) {
-                    headerCells[i].innerText = monthMapping[monthName];
-                }
-            }
-
-            const bodyRows = table.getElementsByTagName('tbody')[0].rows;
-
-            // Localize month names in each row
-            for (let row of bodyRows) {
-                for (let i = 2; i < row.cells.length; i++) { // Again, start from index 2
-                    const monthName = row.cells[i].innerText;
-                    if (monthMapping[monthName]) {
-                        row.cells[i].innerText = monthMapping[monthName];
-                    }
-                }
-            }
-        }
-
-        document.addEventListener('DOMContentLoaded', () => {
-            fetchDivisions();
-            localizeMonths();
-        });
-    </script>
 </body>
 </html>
