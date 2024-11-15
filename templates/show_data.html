@@ -6,18 +6,20 @@
   <title>Sales Data with AG Grid</title>
 
     <!-- AG Grid Community styles and scripts -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community/styles/ag-grid.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community/styles/ag-theme-balham.css">
-    <script src="https://cdn.jsdelivr.net/npm/ag-grid-community/dist/ag-grid-community.noStyle.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-enterprise/styles/ag-grid.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-enterprise/styles/ag-theme-balham.css">
+    <script src="https://cdn.jsdelivr.net/npm/ag-grid-enterprise/dist/ag-grid-enterprise.noStyle.js"></script>
 </head>
 <body>
-
-  <h1>Product Sales Data</h1>
-
+  <div>
+    <h1>Product Sales Data</h1>
+    <button onclick="onBtExport()" style="margin-bottom: 5px; font-weight: bold">Export to Excel</button>
+  </div>
   <!-- AG Grid Container -->
   <div id="myGrid" class="ag-theme-balham"></div>
 
   <script>
+    let gridApi;
     const monthMapping = {
             'January': 'Январь', 
             'February': 'Февраль', 
@@ -55,19 +57,22 @@
     // Column Definitions for AG-Grid
     const columnDefs = [
       { headerName: "Product", field: "Product", sortable: true, filter: true },
-      { headerName: "Division", field: "Division", sortable: true, filter: true },
+      { headerName: "Division", field: "Division", sortable: true, filter: true, enableRowGroup: true },
       
       ...Array.from(availableMonths).map(month => ({
             headerName: monthMapping[month],  // Russian month name
             field: month,                     // English month name as field name to match data
             sortable: true,
-            filter: true
+            filter: true, 
+            aggFunc: "sum"
         })),
 
-      { headerName: "Total", field: "Total", sortable: true, filter: true },
+      { headerName: "Total", field: "Total", sortable: true, filter: true, aggFunc: "sum" },
     ];
 
-
+    function onBtExport() {
+      gridApi.exportDataAsExcel();
+    }
 
     // Grid options
     const gridOptions = {
@@ -89,12 +94,13 @@
         autoSizeStrategy: {
             type: 'fitCellContents'
             },
+        rowGroupPanelShow: 'always',
     };
 
     // Initialize the grid when the page loads
     document.addEventListener('DOMContentLoaded', function () {
         // Use createGrid to initialize the grid in AG Grid v31+
-        const gridApi = agGrid.createGrid(document.getElementById('myGrid'), gridOptions);
+        gridApi = agGrid.createGrid(document.getElementById('myGrid'), gridOptions);
     });
   </script>
 
