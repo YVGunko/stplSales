@@ -141,4 +141,20 @@ def manage_product_patterns():
             new_division = request.json['division_code']
             cursor.execute("INSERT INTO sales_product_paterns (product, division_code) VALUES (%s, %s)", (new_pattern, new_division))
             connection.commit()
-            return jsonify({'message': 'Pattern added!'}), 201
+            return jsonify({'message': f"Паттерн: {new_pattern}, {new_division} создан."}), 201
+        
+@api.route('/api/product_patterns/<string:id>', methods=['PUT', 'DELETE'])
+def update_delete_product_pattern(id):
+    connection = get_db_connection()
+    with connection.cursor() as cursor:
+        if request.method == 'PUT':
+            product = request.json['product']
+            division_code = request.json['division_code']
+            cursor.execute("UPDATE sales_product_paterns SET product = %s, division_code = %s WHERE id = %s", (product, division_code, id))
+            connection.commit()
+            return jsonify({'message': 'Pattern updated!'})
+
+        elif request.method == 'DELETE':
+            cursor.execute("DELETE FROM sales_product_paterns WHERE id = %s", (id,))
+            connection.commit()
+            return jsonify({'message': 'Pattern deleted!'})
