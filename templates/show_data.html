@@ -1,196 +1,108 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Show Data</title>
-    <style>
-        .table-container {
-            width: 100%;
-            max-height: 360px; /* Set desired height */
-            overflow-y: auto;   /* Enable vertical scrolling */
-            border: 1px solid #ccc; /* Optional border for the container */
-            margin-top: 10px; /* Optional spacing */
-        }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sales Data with AG Grid</title>
 
-        table.data {
-            border-collapse: collapse;
-            width: 100%;
-        }
-
-        table.data th, table.data td {
-            border: 1px solid black;
-            padding: 8px;
-            text-align: left;
-        }
-
-        thead th {
-            position: sticky; /* Enable sticky positioning */
-            top: 0; /* Set the top position */
-            background: #fff; /* Set background color for visibility */
-            z-index: 1; /* Ensure the header is above the content */
-        }
-
-        .bold {
-            font-weight: bold; /* Make total row bold */
-            background-color: #f0f0f0; /* Optional: Highlight the total row */
-        }
-
-        select {
-            font-size: 16px; /* Adjust font size */
-            padding: 5px; /* Add some padding */
-            color: #000; /* Text color */
-            background-color: #fff; /* Background color */
-            border: 1px solid #ccc; /* Border for better definition */
-            border-radius: 4px; /* Rounded corners */
-        }
-    </style>
+    <!-- AG Grid Community styles and scripts -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-enterprise/styles/ag-grid.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-enterprise/styles/ag-theme-balham.css">
+    <script src="https://cdn.jsdelivr.net/npm/ag-grid-enterprise/dist/ag-grid-enterprise.noStyle.js"></script>
 </head>
 <body>
-    <h1>Data from Database</h1>
+  <div>
+    <h1>Product Sales Data</h1>
+    <button onclick="onBtExport()" style="margin-bottom: 5px; font-weight: bold">Export to Excel</button>
+  </div>
+  <!-- AG Grid Container -->
+  <div id="myGrid" class="ag-theme-balham"></div>
 
-    <div>
-        <label for="division-select">Filter by Division:</label>
-        <select id="division-select" onchange="filterData()">
-            <option value="">Все подразделения</option> <!-- Default unfiltered option -->
-            <!-- Options will be populated dynamically -->
-        </select>
-
-        <button onclick="sortData('total')">Sort by Total</button>
-        <button onclick="sortData('product')">Sort by Product</button>
-        <button onclick="sortData('division_total')">Sort by Division and Total</button>
-        <button onclick="sortData('division_product')">Sort by Division and Product</button>
-    </div>
-
-    <div class="table-container">
-        <table class="data" id="data-table">
-            <thead>
-                <tr>
-                    <th>Product</th>
-                    <th>Division</th>
-                    {% for month in month_totals.keys() %}
-                        <th>{{ month }}</th>
-                    {% endfor %}
-                </tr>
-            </thead>            
-            <tbody>
-                {% for row in data %}
-                    {% if row.Total_Row %}
-                        <tr class="bold">
-                            <td colspan="2">! Итого:</td>
-                            {% for month in month_totals.keys() %}
-                                <td>{{ month_totals[month] }}</td>
-                            {% endfor %}
-                        </tr>
-                    {% else %}
-                        <tr>
-                            <td>{{ row.Product }}</td>
-                            <td>{{ row.Division }}</td>
-                            {% for month in month_totals.keys() %}
-                                <td>{{ row[month|capitalize] }}</td>
-                            {% endfor %}
-                        </tr>
-                    {% endif %}
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-
-    <script>
-        // Fetch divisions and populate the dropdown
-        async function fetchDivisions() {
-            try {
-                const response = await fetch('/api/divisions');
-                const divisions = await response.json();
-                
-                const divisionSelect = document.getElementById('division-select');
-                divisionSelect.innerHTML = '<option value="">Все подразделения</option>'; // Reset options
-                divisions.forEach(division => {
-                    const option = document.createElement('option');
-                    option.value = division[0]; // Assuming 'code' is at index 0
-                    option.textContent = division[1]; // Assuming 'name' is at index 1
-                    divisionSelect.appendChild(option);
-                });
-            } catch (error) {
-                console.error('Error fetching divisions:', error);
+  <script>
+    let gridApi;
+    const monthMapping = {
+            'January': 'Январь', 
+            'February': 'Февраль', 
+            'March': 'Март', 
+            'April': 'Апрель', 
+            'May': 'Мая', 
+            'June': 'Июнь', 
+            'July': 'Июль', 
+            'August': 'Август', 
+            'September': 'Сентябрь', 
+            'October': 'Октябрь', 
+            'November': 'Ноябрь', 
+            'December': 'Декабрь'
+        };
+    const availableMonths = new Set();
+    const rowData = [
+      {% for row in data %}
+        {
+          Product: "{{ row.Product }}",
+          Division: "{{ row.Division }}",
+          {% for month in months %}
+            "{{ month }}": {{ row[month] }},
+          {% endfor %}
+          Total: {{ row.Total }}
+        },
+      {% endfor %}
+    ];
+    rowData.forEach(row => {
+        Object.keys(row).forEach(field => {
+            if (monthMapping[field]) {
+                availableMonths.add(field);  // Add only if it's a valid month
             }
-        }
-        
-        // Call fetchDivisions on page load
-        document.addEventListener('DOMContentLoaded', fetchDivisions);
+        });
+    });
+    // Column Definitions for AG-Grid
+    const columnDefs = [
+      { headerName: "Product", field: "Product", sortable: true, filter: true },
+      { headerName: "Division", field: "Division", sortable: true, filter: true, enableRowGroup: true },
+      
+      ...Array.from(availableMonths).map(month => ({
+            headerName: monthMapping[month],  // Russian month name
+            field: month,                     // English month name as field name to match data
+            sortable: true,
+            filter: true, 
+            aggFunc: "sum"
+        })),
 
-        function filterData() {
-            const divisionCode = document.getElementById('division-select').value;
-            const table = document.getElementById('data-table');
-            const rows = table.getElementsByTagName('tbody')[0].rows;
+      { headerName: "Total", field: "Total", sortable: true, filter: true, aggFunc: "sum" },
+    ];
 
-            for (let row of rows) {
-                const divisionCell = row.cells[1]?.innerText; // Division name is now in the second column
-                const rowDivisionCode = getDivisionCodeFromName(divisionCell); // Convert name back to code for comparison
-                if (divisionCode === "" || rowDivisionCode === divisionCode) {
-                    row.style.display = ""; // Show row
-                } else {
-                    row.style.display = "none"; // Hide row
-                }
-            }
-        }
+    function onBtExport() {
+      gridApi.exportDataAsExcel();
+    }
 
-        function getDivisionCodeFromName(divisionName) {
-            const divisionSelect = document.getElementById('division-select');
-            for (let option of divisionSelect.options) {
-                if (option.textContent === divisionName) {
-                    return option.value; // Return the code associated with the name
-                }
-            }
-            return null; // If not found
-        }
+    // Grid options
+    const gridOptions = {
+        columnDefs: columnDefs,
+        rowData: rowData,
+        animateRows: true,
+        domLayout: 'autoHeight',
 
-        function sortData(order) {
-            const table = document.getElementById('data-table');
-            const tbody = table.getElementsByTagName('tbody')[0];
-            const rows = Array.from(tbody.rows); // Convert HTMLCollection to Array
+        pagination: true,  // Enable pagination
+        paginationPageSize: 20,
+        grandTotalRow: "top",
 
-            // Determine sorting function based on order
-            const sortFunction = (a, b) => {
-                let divisionA = a.cells[1].innerText.toLowerCase(); // Division name
-                let divisionB = b.cells[1].innerText.toLowerCase(); // Division name
+        defaultColDef: {
+            sortable: true,
+            filter: true,
+            resizable: true,
+        },
 
-                if (order === 'total') {
-                    let totalA = parseInt(a.cells[2].innerText);
-                    let totalB = parseInt(b.cells[2].innerText);
-                    return totalB - totalA; // Sort by Total in descending order
-                } else if (order === 'product') {
-                    let productA = a.cells[0].innerText.toLowerCase();
-                    let productB = b.cells[0].innerText.toLowerCase();
-                    return productA > productB ? 1 : -1; // Sort by Product name
-                } else if (order === 'division_total') {
-                    let totalA = parseInt(a.cells[2].innerText);
-                    let totalB = parseInt(b.cells[2].innerText);
-                    if (divisionA === divisionB) {
-                        return totalB - totalA; // If divisions are equal, sort by Total
-                    }
-                    return divisionA > divisionB ? 1 : -1; // Otherwise sort by Division
-                } else if (order === 'division_product') {
-                    let productA = a.cells[0].innerText.toLowerCase();
-                    let productB = a.cells[0].innerText.toLowerCase();
-                    if (divisionA === divisionB) {
-                        return productA > productB ? 1 : -1; // If divisions are equal, sort by Product
-                    }
-                    return divisionA > divisionB ? 1 : -1; // Otherwise sort by Division
-                }
-            };
+        autoSizeStrategy: {
+            type: 'fitCellContents'
+            },
+        rowGroupPanelShow: 'always',
+    };
 
-            // Sort rows based on the defined sorting function
-            rows.sort(sortFunction);
+    // Initialize the grid when the page loads
+    document.addEventListener('DOMContentLoaded', function () {
+        // Use createGrid to initialize the grid in AG Grid v31+
+        gridApi = agGrid.createGrid(document.getElementById('myGrid'), gridOptions);
+    });
+  </script>
 
-            // Remove existing rows and append sorted rows
-            while (tbody.firstChild) {
-                tbody.removeChild(tbody.firstChild);
-            }
-
-            // Append sorted rows back to the table
-            rows.forEach(row => tbody.appendChild(row));
-        }
-    </script>
 </body>
 </html>

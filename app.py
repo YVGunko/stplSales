@@ -1,9 +1,11 @@
-from flask import Flask, jsonify, request, render_template
+from io import BytesIO
+from flask import Flask, jsonify, request, render_template, send_file, session
 import pandas as pd
 import pymysql
 import numpy as np
 import json
 import locale
+import os
 from datetime import datetime
 
 locale.setlocale(locale.LC_TIME, 'ru_RU.UTF-8')
@@ -15,12 +17,17 @@ app = Flask(__name__)
 
 app.register_blueprint(api)
 
+# Set the secret key to a random bytes string
+app.secret_key = os.urandom(24)  # Generates a random 24-byte key
+
 # Global variable to store DataFrame
 uploaded_df = None
 # Global variable to store patterns and divisions
 patterns_divisions_dict = {}
 # Global const
 start_row = 0
+skip_rows = 3
+file_total = 0
 first_column_name = 'Product'
 second_column_name = 'Total'
 third_column_name = 'Division'
@@ -35,12 +42,23 @@ def check_db_connection():
 
 def read_excel(file):
     # Read the Excel file into a DataFrame
-    df = pd.read_excel(file)
+    df = pd.read_excel(file, skiprows=skip_rows)
     return df
+
+def read_total():
+    last_row = uploaded_df.tail(1)
+
+    # Access the value from the fourth column
+    value_from_fourth_column = last_row.iloc[0, 3]  # Using index (0-based)
+
+    print("Value from the fourth column of the last row:")
+    print(value_from_fourth_column)
+    return value_from_fourth_column
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
     global uploaded_df
+    global file_total
     message = ""
     current_year = datetime.now().year  # Get the current year
     if request.method == 'POST':
@@ -50,17 +68,8 @@ def index():
             message = 'Database connection failed.'
             return render_template('index.html', current_year=current_year, status=message)
 
-        # Define the range of rows you want to read
-        start_exel_row = 1  # Adjust this to your desired starting row (0-indexed)
-        num_rows = 100  # Number of rows to read
-
-        # Read the specific range of rows from the Excel file
-        uploaded_df = pd.read_excel(file, skiprows=start_exel_row, nrows=num_rows)
-        # uploaded_df = pd.read_excel(file, skiprows=start_exel_row, nrows=num_rows)
-
-        #print("Before sorting:")
-        #print(uploaded_df)
-
+        uploaded_df = read_excel(file)
+        file_total = read_total()
         # Call prepare_excel with the uploaded DataFrame
         modified_excel_df = pd.DataFrame(prepare_excel(uploaded_df) , columns=[first_column_name, second_column_name])
 
@@ -69,9 +78,6 @@ def index():
         # If you want to reset the index after reading
         modified_excel_df.reset_index(drop=True, inplace=True)
 
-        #print("After sorting:")
-        #print(modified_excel_df)
-
         # Call analyze_excel with the uploaded DataFrame
         modified_content = analyze_excel(modified_excel_df) 
 
@@ -79,13 +85,11 @@ def index():
         modified_df = pd.DataFrame(modified_content, columns=[first_column_name, second_column_name, third_column_name])
 
         json_dumps=json.dumps(modified_df.to_dict(orient='records'))
-        print(json_dumps)
 
-        return render_template('index.html', current_year=current_year, 
+        return render_template('index.html', current_year=current_year, file_total = file_total,
                                status='File uploaded successfully!', 
                                uploaded_file=uploaded_df.to_html(classes='data', header="true", index=False),
-                               modified_content=modified_df.to_html(classes='data', header="true", index=False),
-                               modified_content_json=json.dumps(modified_df.to_dict(orient='records')))  # Pass modified content as HTML
+                               modified_content_json=json_dumps)  
 
     return render_template('index.html', status=message)
 
@@ -95,10 +99,12 @@ def query_database(data):
         conn = pymysql.connect(**MYSQL_CONFIG)
         cursor = conn.cursor()
 
-        # Prepare the query to search for the nomenclature
-        query = "SELECT DISTINCT division_code FROM master_data WHERE nomenklature LIKE '{s}%'".format(s=data)
-        # query = "SELECT division_code FROM product WHERE name LIKE '{s}%'".format(s=data)
+        query = "SELECT division_code FROM sales_product_paterns WHERE product = '{s}' ".format(s=data)
         cursor.execute(query)  # Pass the entire content as a parameter
+        if cursor.rowcount == 0:
+            query = "SELECT DISTINCT division_code FROM master_data WHERE nomenklature LIKE '{s}%'".format(s=data)
+            # query = "SELECT division_code FROM product WHERE name LIKE '{s}%'".format(s=data)
+            cursor.execute(query)  # Pass the entire content as a parameter
 
         results = cursor.fetchall()  # Fetch all results
 
@@ -111,21 +117,19 @@ def query_database(data):
 
 def describe_division(second_column_content):
     global patterns_divisions_dict
-
-    # Check if the second_column_content matches any pattern
-    for pattern in patterns_divisions_dict:
-        if pattern in second_column_content:
-            return patterns_divisions_dict[pattern]  # Return the corresponding division
-
-    # If no match found, query the database with second_column_content+SPACE
+    # Query the database with second_column_content+SPACE
     division_code = query_database(second_column_content+" ")
     
     # If the query returns one result, return the division code
     if len(division_code) == 1:
         return division_code[0][0]  # Return the division_code
-
-    # Return an empty string if there are no results or more than one result
-    return ""
+    
+    # Check if the second_column_content matches any pattern
+    for pattern in patterns_divisions_dict:
+        if pattern in second_column_content:
+            return patterns_divisions_dict[pattern]  # Return the corresponding division
+    # Return "0" string if there are no results or more than one result
+    return "0"
 
 def get_patterns_from_db():
     """Fetch patterns and their corresponding divisions from the MySQL database."""
@@ -144,8 +148,23 @@ def get_patterns_from_db():
     finally:
         connection.close()
 
+def contains_substring_no_space(s, substring):
+    index = s.find(substring)
+    if index == -1:
+        return False
+    # Check if the character before the substring is a space or if it's at the start of the string
+    if index == 0 or s[index - 1] != ' ':
+        return True
+    return False
+
 def prepare_exel_content(second_column_content):
     if isinstance(second_column_content, str):
+        if 'ПОДОШВА ПУ ' in second_column_content:
+            second_column_content = second_column_content.replace('ПОДОШВА ПУ ', '')  # replace
+        if 'ПОДОШВА ТЭП ' in second_column_content:
+            second_column_content = second_column_content.replace('ПОДОШВА ТЭП ', '')  # replace
+        if 'ПОДОШВА ЭВА ' in second_column_content:
+            second_column_content = second_column_content.replace('ПОДОШВА ЭВА ', '')  # replace
         if 'ПОДОШВА ' in second_column_content:
             second_column_content = second_column_content.replace('ПОДОШВА ', '')  # replace
         if '(' in second_column_content:
@@ -205,7 +224,7 @@ def analyze_excel(df):
         substring = product_content[:first_space_index] if first_space_index != -1 else product_content
         
         # Look up for division
-        division = describe_division(substring) if first_space_index != -1 else ""
+        division = describe_division(substring) if substring else "0"
 
         # Initialize the total sum with the current row's fourth column value
         total_sum = number_content
@@ -238,8 +257,8 @@ def save_data():
 @app.route('/show_data', methods=['GET'])
 def show_data():
     try:
-        # Set locale for month names
-        locale.setlocale(locale.LC_TIME, 'ru_RU.UTF-8')
+        # Set locale for month names (if needed elsewhere, else can be removed)
+        locale.setlocale(locale.LC_TIME, '')
         print('Current locale:', locale.getlocale(locale.LC_TIME))
 
         connection = pymysql.connect(**MYSQL_CONFIG)
@@ -251,9 +270,75 @@ def show_data():
                        MONTH(s.date_of_change) AS month_number
                 FROM sales s
                 JOIN division d ON s.division_code = d.code
+                ORDER BY MONTH(s.date_of_change), s.product
             """
             cursor.execute(query)
             results = cursor.fetchall()  
+
+        # Initialize a dictionary to hold the pivoted data
+        pivot_data = {}
+        months_order = []
+        seen_months = set()
+
+        for row in results:
+            month_name = row[3]  # Assuming month_name is at index 3
+            if month_name not in seen_months:
+                seen_months.add(month_name)
+                months_order.append(month_name)
+
+        # Process each row and build the pivoted data
+        for row in results:
+            product, total, division_name, month_name, month_number = row
+
+            # Create a key for each product and division combination
+            product_division_key = f"{product}_{division_name}"
+
+            # Initialize the dictionary for the key if not already present
+            if product_division_key not in pivot_data:
+                pivot_data[product_division_key] = {
+                    "Product": product,
+                    "Division": division_name,
+                    **{month: 0 for month in months_order}  # Initialize all months to 0
+                }
+
+            # Add the total to the corresponding month
+            if month_name in pivot_data[product_division_key]:
+                pivot_data[product_division_key][month_name] += total
+            else:
+                # Handle the case where month_name doesn't exist (though it should if months_order is correct)
+                pivot_data[product_division_key][month_name] = total
+
+        # Add a 'Total' column for each product
+        for key, data in pivot_data.items():
+            data["Total"] = sum(data[month] for month in months_order)
+
+        # Convert pivot_data dictionary to a list of rows (for AG Grid)
+        pivot_table_rows = list(pivot_data.values())
+
+    except pymysql.MySQLError as e:
+        return render_template('show_data.html', error=str(e), data=[], divisions=[])
+
+    # Render the template and pass data for AG Grid
+    return render_template('show_data.html', 
+                           data=pivot_table_rows,  # Pass the processed data
+                           months=months_order)  # Optionally, pass the months for filtering
+
+@app.route('/export')
+def export():
+    try:
+        # Connect to the database
+        connection = pymysql.connect(**MYSQL_CONFIG)
+        with connection.cursor() as cursor:
+            # Fetch the complete sales data
+            query = """
+                SELECT s.product, s.total, d.name AS division_name, 
+                       DATE_FORMAT(s.date_of_change, '%M') AS month_name,
+                       MONTH(s.date_of_change) AS month_number
+                FROM sales s
+                JOIN division d ON s.division_code = d.code
+            """
+            cursor.execute(query)
+            results = cursor.fetchall()
 
         # Convert results to DataFrame
         columns = ['Product', 'Total', 'Division', 'Month', 'Month Number']
@@ -274,41 +359,22 @@ def show_data():
             axis=1
         )
 
-        pivot_table.reset_index(inplace=True)
+        # Convert the final pivot table to a DataFrame for export
+        final_data = pivot_table.reset_index()
 
-        # Add a summary row
-        summary_row = pivot_table.sum(numeric_only=True)
-        summary_row['Product'] = '! Итого:'
-        summary_row['Division'] = ''
-        pivot_table = pd.concat([summary_row.to_frame().T, pivot_table], ignore_index=True)
+        # Export to Excel
+        output_path = 'full_data_with_totals.xlsx'
+        final_data.to_excel(output_path, index=False)
 
-        # Add a flag to identify the total row
-        pivot_table['Total Row'] = pivot_table['Product'] == '! Итого:'
-
-        # Calculate month totals for passing to the template
-        month_totals = pivot_table.drop(columns=['Product', 'Division', 'Total Row']).sum().to_dict()
-        print('month_totals: ' + str(month_totals))  # Debugging line
-
-        # Create a mapping from English month names to Russian month names
-        month_mapping = {
-            'January': 'января', 'February': 'февраля', 'March': 'марта', 
-            'April': 'апреля', 'May': 'мая', 'June': 'июня', 
-            'July': 'июля', 'August': 'августа', 'September': 'сентября', 
-            'October': 'октября', 'November': 'ноября', 'December': 'декабря'
-        }
-
-        # Map month totals using the localized month names
-        month_totals_localized = {month_mapping[month]: month_totals[month] for month in month_totals if month in month_mapping}
-
-        print('final month_totals: ' + str(month_totals_localized))  # Debugging line
+        # Return the file for download
+        return send_file(output_path, as_attachment=True)
 
     except pymysql.MySQLError as e:
-        return render_template('show_data.html', error=str(e), data=[], divisions=[])
+        return str(e), 500  # Database error handling
 
-    # Prepare division list for filtering
-    division_list = [{'code': d[0], 'name': d[1]} for d in results]
+    except Exception as e:
+        return str(e), 500  # General error handling
 
-    return render_template('show_data.html', data=pivot_table.to_dict(orient='records'), month_totals=month_totals, divisions=division_list)
 
 if __name__ == '__main__':
     app.run(debug=True)
