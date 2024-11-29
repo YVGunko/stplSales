@@ -126,3 +126,19 @@ def update_delete_pattern(pattern):
             cursor.execute("DELETE FROM division_patterns WHERE pattern = %s", (pattern,))
             connection.commit()
             return jsonify({'message': 'Pattern deleted!'})
+
+@api.route('/api/product_patterns', methods=['GET', 'POST'])
+def manage_product_patterns():
+    connection = get_db_connection()
+    with connection.cursor() as cursor:
+        if request.method == 'GET':
+            cursor.execute("SELECT id, product, division_code FROM sales_product_paterns")
+            sales_product_paterns = cursor.fetchall()
+            return jsonify([{'id': pd[0], 'product': pd[1], 'division_code': pd[2]} for pd in sales_product_paterns])
+        
+        elif request.method == 'POST':
+            new_pattern = request.json['product']
+            new_division = request.json['division_code']
+            cursor.execute("INSERT INTO sales_product_paterns (product, division_code) VALUES (%s, %s)", (new_pattern, new_division))
+            connection.commit()
+            return jsonify({'message': 'Pattern added!'}), 201
