@@ -82,6 +82,7 @@
                   </select>
                 </label>
                 <input id="filterField" type="text" placeholder="Filter" />
+                <button id="addProductPatternButton" onclick="addProductPattern()" disabled>Add Product Pattern</button>
             </div>
         </div>
         <div id="modifiedContentContainer" class="table-container-right">
@@ -116,6 +117,7 @@
     <script>
         let modifiedContentJson = []; 
         let modifiedContentTable;
+        let selectedRowData = {};
 
         // Load data into Handsontable and calculate total
         try {
@@ -160,7 +162,17 @@
 
                 licenseKey: 'non-commercial-and-evaluation',
             });
-
+            modifiedContentTable.updateSettings({
+                afterSelectionEnd: function (r, c, r2, c2) {
+                    if (r === r2) {
+                        selectedRowData = modifiedContentTable.getSourceDataAtRow(modifiedContentTable.toPhysicalRow(r)); // Get the row data
+                        if (Object.keys(selectedRowData).length !== 0) {
+                            toggleAddProductPatternButton();
+                            console.log(JSON.stringify(selectedRowData)); // Convert to JSON and log
+                        }
+                    }
+                },
+            })
             // Update total immediately after loading data
             updateTableTotal();
 
@@ -219,6 +231,10 @@
 
             saveButton.disabled = !(monthInput && yearInput && modifiedContentTable); // Enable if both inputs have values
         }
+        // Function to toggle the addProductPattern based on 
+        function toggleAddProductPatternButton() {
+            addProductPatternButton.disabled = (Object.keys(selectedRowData).length === 0); // Enable if both inputs have values
+        }
 
         // Pre-fill the month and year inputs on page load
         document.addEventListener('DOMContentLoaded', () => {
@@ -226,6 +242,7 @@
             const yearInput = document.getElementById('yearInput');
             yearInput.value = now.getFullYear();
             toggleSaveButton();
+            toggleAddProductPatternButton();
         });
 
         async function saveData() {
@@ -275,6 +292,17 @@
             if (result.status === 'success') {
                 window.location.href = '/show_data';  // Redirect to show_data page
             }
+        }
+
+        async function addProductPattern() {
+            const response = await fetch('/api/product_patterns', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ data: selectedRowData }),
+            });
+
+            const result = await response.json();
+            alert(result.message);
         }
     </script>
     {% endif %}

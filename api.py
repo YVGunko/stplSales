@@ -110,7 +110,7 @@ def manage_patterns():
             new_division = request.json['code']
             cursor.execute("INSERT INTO division_patterns (pattern, code) VALUES (%s, %s)", (new_pattern, new_division))
             connection.commit()
-            return jsonify({'message': 'Pattern added!'}), 201
+            return jsonify({"status": "success", 'message': 'Pattern added!'}), 201
 
 @api.route('/api/patterns/<string:pattern>', methods=['PUT', 'DELETE'])
 def update_delete_pattern(pattern):
@@ -129,32 +129,45 @@ def update_delete_pattern(pattern):
 
 @api.route('/api/product_patterns', methods=['GET', 'POST'])
 def manage_product_patterns():
-    connection = get_db_connection()
-    with connection.cursor() as cursor:
-        if request.method == 'GET':
-            cursor.execute("SELECT id, product, division_code FROM sales_product_paterns")
-            sales_product_paterns = cursor.fetchall()
-            return jsonify([{'id': pd[0], 'product': pd[1], 'division_code': pd[2]} for pd in sales_product_paterns])
-        
-        elif request.method == 'POST':
-            new_pattern = request.json['product']
-            new_division = request.json['division_code']
-            cursor.execute("INSERT INTO sales_product_paterns (product, division_code) VALUES (%s, %s)", (new_pattern, new_division))
-            connection.commit()
-            return jsonify({'message': f"Паттерн: {new_pattern}, {new_division} создан."}), 201
+    try:
+        connection = get_db_connection()
+        with connection.cursor() as cursor:
+            if request.method == 'GET':
+                cursor.execute("SELECT id, product, division_code FROM sales_product_paterns")
+                sales_product_paterns = cursor.fetchall()
+                return jsonify([{'id': pd[0], 'product': pd[1], 'division_code': pd[2]} for pd in sales_product_paterns])
+            
+            elif request.method == 'POST':
+                data = request.json.get('data', []) 
+                new_pattern = data['Product']
+                new_division = data['Division']
+                cursor.execute("INSERT INTO sales_product_paterns (product, division_code) VALUES (%s, %s)", (new_pattern, new_division))
+                connection.commit()
+                return jsonify({"status": "success", 'message': f"Паттерн: {new_pattern}, {new_division} создан."}), 201
+    except pymysql.MySQLError as e:
+        return jsonify({"status": "error", "message": str(e)})
+    
+    finally:
+        connection.close()
         
 @api.route('/api/product_patterns/<string:id>', methods=['PUT', 'DELETE'])
 def update_delete_product_pattern(id):
-    connection = get_db_connection()
-    with connection.cursor() as cursor:
-        if request.method == 'PUT':
-            product = request.json['product']
-            division_code = request.json['division_code']
-            cursor.execute("UPDATE sales_product_paterns SET product = %s, division_code = %s WHERE id = %s", (product, division_code, id))
-            connection.commit()
-            return jsonify({'message': 'Pattern updated!'})
+    try:
+        connection = get_db_connection()
+        with connection.cursor() as cursor:
+            if request.method == 'PUT':
+                product = request.json['product']
+                division_code = request.json['division_code']
+                cursor.execute("UPDATE sales_product_paterns SET product = %s, division_code = %s WHERE id = %s", (product, division_code, id))
+                connection.commit()
+                return jsonify({"status": "success", 'message': 'Pattern updated!'})
 
-        elif request.method == 'DELETE':
-            cursor.execute("DELETE FROM sales_product_paterns WHERE id = %s", (id,))
-            connection.commit()
-            return jsonify({'message': 'Pattern deleted!'})
+            elif request.method == 'DELETE':
+                cursor.execute("DELETE FROM sales_product_paterns WHERE id = %s", (id,))
+                connection.commit()
+                return jsonify({"status": "success", 'message': 'Pattern deleted!'})
+    except pymysql.MySQLError as e:
+        return jsonify({"status": "error", "message": str(e)})
+    
+    finally:
+        connection.close()
