@@ -231,6 +231,7 @@
 
             saveButton.disabled = !(monthInput && yearInput && modifiedContentTable); // Enable if both inputs have values
         }
+
         // Function to toggle the addProductPattern based on 
         function toggleAddProductPatternButton() {
             addProductPatternButton.disabled = (Object.keys(selectedRowData).length === 0); // Enable if both inputs have values
@@ -304,6 +305,7 @@
             const result = await response.json();
             alert(result.message);
         }
+
     </script>
     {% endif %}
 </body>
